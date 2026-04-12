@@ -1,0 +1,68 @@
+﻿import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
+import pandas as pd
+
+
+# --- CONFIGURACIÓN DE CONEXIÓN ---
+scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+# Railway leerá esto desde sus "Variables de Entorno"
+creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+client = gspread.authorize(creds)
+
+
+ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA”
+
+
+st.set_page_config(page_title="Sistema Pro Multiliga", layout="wide")
+
+
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+
+
+# --- FUNCIÓN PARA VERIFICAR AMIGOS ---
+def check_user(usuario_intento):
+    try:
+        sh_control = client.open_by_key(ID_CONTROL).worksheet("Sheet1") # O el nombre de tu pestaña 1
+        usuarios = sh_control.col_values(1)
+        return usuario_intento in usuarios
+    except: return False
+
+
+# --- INTERFAZ DE LOGIN ---
+if not st.session_state['autenticado']:
+    st.title("🔐 Acceso Privado")
+    user_input = st.text_input("Usuario:")
+    if st.button("Entrar"):
+        if check_user(user_input):
+            st.session_state['autenticado'] = True
+            st.rerun()
+        else:
+            st.error("No autorizado.")
+else:
+    # --- APP PRINCIPAL (OPCIÓN B) ---
+    st.title("⚽ Análisis Multiliga")
+    
+    # 1. Cargar Ligas disponibles desde el Excel de Control
+    try:
+        sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
+        df_ligas = pd.DataFrame(sh_ligas.get_all_records())
+        
+        liga_seleccionada = st.selectbox("Selecciona la Competición", df_ligas['Nombre de la liga'])
+        id_liga_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_seleccionada]['ID del libro'].values[0]
+        
+        # 2. Cargar Equipos de esa Liga
+        libro_datos = client.open_by_key(id_liga_actual)
+        equipos = [sh.title for sh in libro_datos.worksheets()]
+        
+        col1, col2 = st.columns(2)
+        with col1: local = st.selectbox("Local", equipos)
+        with col2: visitante = st.selectbox("Visitante", equipos)
+        
+        if st.button("CALCULAR PREDICCIÓN"):
+            st.success(f"Analizando {local} vs {visitante} en la liga {liga_seleccionada}...")
+            # Aquí va tu lógica XGBoost leyendo las pestañas...
+            
+    except Exception as e:
+        st.error(f"Error: Asegúrate de que la pestaña 'LIGAS' existe y el ID es correcto. {e}")

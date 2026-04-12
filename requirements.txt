@@ -1,0 +1,5 @@
+﻿streamlit
+pandas
+xgboost
+gspread
+google-auth
