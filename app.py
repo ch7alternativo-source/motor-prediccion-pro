@@ -29,28 +29,32 @@ if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 
-# --- FUNCIÓN PARA VERIFICAR AMIGOS ---
-def check_user(usuario_intento):
-    try:
-        sh_control = client.open_by_key(ID_CONTROL).worksheet("Sheet1") # O el nombre de tu pestaña 1
-        usuarios = sh_control.col_values(1)
-        return usuario_intento in usuarios
-    except: return False
-
-
-def check_user(usuario_intento, pass_intento):
-    try:
-        sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
-        usuarios_data = sh_control.get_all_values() 
+# --- INTERFAZ DE LOGIN ---
+if not st.session_state['autenticado']:
+    st.title("🔐 Acceso Privado")
+    with st.form("login_form"):
+        user_input = st.text_input("Usuario:")
+        pass_input = st.text_input("Contraseña:", type="password")
+        submit_button = st.form_submit_button("Entrar")
         
-        for fila in usuarios_data:
-            # Comparamos usuario (fila 0) y contraseña (fila 1)
-            if fila[0] == usuario_intento and str(fila[1]) == str(pass_intento):
-                return True
-        return False
-    except:
-        return False
+        if submit_button:
+            if check_user(user_input, pass_input):
+                st.session_state['autenticado'] = True
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos.")
+
 else:
+    # --- APP PRINCIPAL (SI YA ESTÁ LOGUEADO) ---
+    st.title("⚽ Análisis Multiliga")
+    
+    try:
+        sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
+        df_ligas = pd.DataFrame(sh_ligas.get_all_records())
+        
+        liga_seleccionada = st.selectbox("Selecciona la Competición", df_ligas['Nombre de la liga'])
+        id_liga_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_seleccionada]['ID del libro'].values[0]
+    
     # --- APP PRINCIPAL (OPCIÓN B) ---
     st.title("⚽ Análisis Multiliga")
     
