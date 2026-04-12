@@ -1,9 +1,9 @@
-﻿import streamlit as st
+import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 
-# 1. Configuración de la página (SIEMPRE PRIMERO)
+# 1. Configuración de la página (DEBE SER LO PRIMERO)
 st.set_page_config(page_title="Sistema Pro Multiliga", layout="wide")
 
 # Ocultar menús de Streamlit
@@ -28,16 +28,10 @@ def check_user(usuario_intento, pass_intento):
     try:
         sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
         usuarios_data = sh_control.get_all_values() 
-        
         for fila in usuarios_data:
-            # Convertimos a texto y limpiamos espacios
             u_excel = str(fila[0]).strip()
             p_excel = str(fila[1]).strip()
-            
-            # Quitamos el .0 que Google Sheets añade a veces a los números
-            if p_excel.endswith('.0'):
-                p_excel = p_excel[:-2]
-
+            if p_excel.endswith('.0'): p_excel = p_excel[:-2]
             if u_excel == str(usuario_intento).strip() and p_excel == str(pass_intento).strip():
                 return True
         return False
@@ -63,29 +57,43 @@ if not st.session_state['autenticado']:
             else:
                 st.error("Usuario o contraseña incorrectos.")
 
-# --- APP PRINCIPAL (SI YA ESTÁ LOGUEADO) ---
+# --- APP PRINCIPAL ---
 else:
     st.title("⚽ Análisis Multiliga")
     
     try:
-        # 1. Cargar Ligas desde Excel de Control
+        # Cargar Ligas
         sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
         df_ligas = pd.DataFrame(sh_ligas.get_all_records())
         
         col_liga, col_jor = st.columns(2)
-        
         with col_liga:
             liga_seleccionada = st.selectbox("Selecciona la Competición", df_ligas['Nombre de la liga'])
             id_liga_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_seleccionada]['ID del libro'].values[0]
-
         with col_jor:
-            jornadas = list(range(1, 45))
-            jornada_seleccionada = st.selectbox("Selecciona la Jornada", jornadas)
+            jornada_seleccionada = st.selectbox("Selecciona la Jornada", list(range(1, 45)))
 
-        # 2. Cargar Equipos de la Liga seleccionada
+        # Cargar Equipos
         libro_datos = client.open_by_key(id_liga_actual)
         excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
-        
         pestanas_validas = [sh.title for sh in libro_datos.worksheets() if sh.title not in excluir]
         
-        listado
+        listado_local = [t for t in pestanas_validas if "LOCAL" in t.upper()]
+        listado_visitante = [t for t in pestanas_validas if "VISITANTE" in t.upper()]
+
+        def limpiar_nombre(nombre_pestana):
+            return nombre_pestana.replace(" LOCAL", "").replace(" local", "").replace(" VISITANTE", "").replace(" visitante", "").strip()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            local = st.selectbox("Selecciona Local", listado_local, format_func=limpiar_nombre)
+        with col2:
+            equipo_base_sel = limpiar_nombre(local)
+            opciones_v = [v for v in listado_visitante if equipo_base_sel not in v.upper()]
+            visitante = st.selectbox("Selecciona Visitante", opciones_v, format_func=limpiar_nombre)
+        
+        if st.button("CALCULAR PREDICCIÓN"):
+            st.success(f"Analizando: {limpiar_nombre(local)} vs {limpiar_nombre(visitante)}")
+
+    except Exception as e:
+        st.error(f"Error: {e}")
