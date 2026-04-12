@@ -29,21 +29,26 @@ def check_user(usuario_intento, pass_intento):
         sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
         usuarios_data = sh_control.get_all_values() 
         for fila in usuarios_data:
-            # fila[0] es Usuario, fila[1] es Contraseña
-            if fila[0] == usuario_intento and str(fila[1]) == str(pass_intento):
+           # --- FUNCIÓN PARA VERIFICAR USUARIO Y CONTRASEÑA ---
+def check_user(usuario_intento, pass_intento):
+    try:
+        sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
+        usuarios_data = sh_control.get_all_values() 
+        
+        for fila in usuarios_data:
+            # Convertimos a texto y limpiamos espacios
+            u_excel = str(fila[0]).strip()
+            p_excel = str(fila[1]).strip()
+            
+            # Quitamos el .0 que Google Sheets añade a veces a los números
+            if p_excel.endswith('.0'):
+                p_excel = p_excel[:-2]
+
+            if u_excel == str(usuario_intento).strip() and p_excel == str(pass_intento).strip():
                 return True
         return False
-    except Exception as e:
+    except:
         return False
-
-# 4. Control de Estado de Autenticación
-if 'autenticado' not in st.session_state:
-    st.session_state['autenticado'] = False
-
-# --- INTERFAZ DE LOGIN ---
-if not st.session_state['autenticado']:
-    st.title("🔐 Acceso Privado")
-    with st.form("login_form"):
         user_input = st.text_input("Usuario:")
         pass_input = st.text_input("Contraseña:", type="password")
         submit_button = st.form_submit_button("Entrar")
