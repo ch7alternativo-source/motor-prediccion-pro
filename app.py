@@ -38,16 +38,18 @@ def check_user(usuario_intento):
     except: return False
 
 
-# --- INTERFAZ DE LOGIN ---
-if not st.session_state['autenticado']:
-    st.title("🔐 Acceso Privado")
-    user_input = st.text_input("Usuario:")
-    if st.button("Entrar"):
-        if check_user(user_input):
-            st.session_state['autenticado'] = True
-            st.rerun()
-        else:
-            st.error("No autorizado.")
+def check_user(usuario_intento, pass_intento):
+    try:
+        sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
+        usuarios_data = sh_control.get_all_values() 
+        
+        for fila in usuarios_data:
+            # Comparamos usuario (fila 0) y contraseña (fila 1)
+            if fila[0] == usuario_intento and str(fila[1]) == str(pass_intento):
+                return True
+        return False
+    except:
+        return False
 else:
     # --- APP PRINCIPAL (OPCIÓN B) ---
     st.title("⚽ Análisis Multiliga")
