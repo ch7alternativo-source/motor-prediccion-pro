@@ -6,7 +6,7 @@ import pandas as pd
 # 1. Configuración de la página (DEBE SER LO PRIMERO)
 st.set_page_config(page_title="Sistema Pro Multiliga", layout="wide")
 
-# Ocultar menús de Streamlit
+# Ocultar menús de Streamlit para que parezca una App
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -29,9 +29,12 @@ def check_user(usuario_intento, pass_intento):
         sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
         usuarios_data = sh_control.get_all_values() 
         for fila in usuarios_data:
+            # Convertimos a texto y limpiamos espacios
             u_excel = str(fila[0]).strip()
             p_excel = str(fila[1]).strip()
+            # Quitamos el .0 por si Google Sheets lo añade a los números
             if p_excel.endswith('.0'): p_excel = p_excel[:-2]
+            
             if u_excel == str(usuario_intento).strip() and p_excel == str(pass_intento).strip():
                 return True
         return False
@@ -57,12 +60,12 @@ if not st.session_state['autenticado']:
             else:
                 st.error("Usuario o contraseña incorrectos.")
 
-# --- APP PRINCIPAL ---
+# --- APP PRINCIPAL (SOLO SI ESTÁ LOGUEADO) ---
 else:
     st.title("⚽ Análisis Multiliga")
     
     try:
-        # Cargar Ligas
+        # Cargar Ligas desde Excel de Control
         sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
         df_ligas = pd.DataFrame(sh_ligas.get_all_records())
         
@@ -73,7 +76,7 @@ else:
         with col_jor:
             jornada_seleccionada = st.selectbox("Selecciona la Jornada", list(range(1, 45)))
 
-        # Cargar Equipos
+        # Cargar Equipos de la Liga seleccionada
         libro_datos = client.open_by_key(id_liga_actual)
         excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
         pestanas_validas = [sh.title for sh in libro_datos.worksheets() if sh.title not in excluir]
@@ -94,6 +97,7 @@ else:
         
         if st.button("CALCULAR PREDICCIÓN"):
             st.success(f"Analizando: {limpiar_nombre(local)} vs {limpiar_nombre(visitante)}")
-
+            # Aquí irá la lógica del modelo más adelante
+            
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error cargando los datos de la liga: {e}")
