@@ -3,10 +3,9 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 
-# 1. Configuración de la página (DEBE SER LO PRIMERO)
+# 1. Configuración de la página
 st.set_page_config(page_title="Sistema Pro Multiliga", layout="wide")
 
-# Ocultar menús de Streamlit para que parezca una App
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -16,88 +15,70 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Configuración de Conexión a Google Sheets
+# 2. Conexión
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
 
-# 3. Función para verificar Usuario y Contraseña
-def check_user(usuario_intento, pass_intento):
+# 3. Función de verificación (Simplificada al máximo para que no falle)
+def check_user(user_in, pass_in):
     try:
-        sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
-        usuarios_data = sh_control.get_all_values() 
-        for fila in usuarios_data:
-            # Convertimos a texto y limpiamos espacios
-            u_excel = str(fila[0]).strip()
-            p_excel = str(fila[1]).strip()
-            # Quitamos el .0 por si Google Sheets lo añade a los números
-            if p_excel.endswith('.0'): p_excel = p_excel[:-2]
-            
-            if u_excel == str(usuario_intento).strip() and p_excel == str(pass_intento).strip():
+        sh = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
+        data = sh.get_all_values()
+        for fila in data:
+            # Compara usuario (A) y contraseña (B) quitando espacios
+            if str(fila[0]).strip() == str(user_in).strip() and str(fila[1]).strip() == str(pass_in).strip():
                 return True
         return False
     except:
         return False
 
-# 4. Estado de autenticación
+# 4. Lógica de acceso
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
-# --- INTERFAZ DE LOGIN ---
 if not st.session_state['autenticado']:
     st.title("🔐 Acceso Privado")
-    with st.form("login_form"):
-        user_input = st.text_input("Usuario:")
-        pass_input = st.text_input("Contraseña:", type="password")
-        submit_button = st.form_submit_button("Entrar")
-        
-        if submit_button:
-            if check_user(user_input, pass_input):
+    with st.form("login"):
+        u = st.text_input("Usuario:")
+        p = st.text_input("Contraseña:", type="password")
+        if st.form_submit_button("Entrar"):
+            if check_user(u, p):
                 st.session_state['autenticado'] = True
                 st.rerun()
             else:
-                st.error("Usuario o contraseña incorrectos.")
-
-# --- APP PRINCIPAL (SOLO SI ESTÁ LOGUEADO) ---
+                st.error("Datos incorrectos")
 else:
+    # --- APP PRINCIPAL ---
     st.title("⚽ Análisis Multiliga")
-    
     try:
-        # Cargar Ligas desde Excel de Control
+        # Carga de Ligas
         sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
         df_ligas = pd.DataFrame(sh_ligas.get_all_records())
         
-        col_liga, col_jor = st.columns(2)
-        with col_liga:
-            liga_seleccionada = st.selectbox("Selecciona la Competición", df_ligas['Nombre de la liga'])
-            id_liga_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_seleccionada]['ID del libro'].values[0]
-        with col_jor:
-            jornada_seleccionada = st.selectbox("Selecciona la Jornada", list(range(1, 45)))
+        c1, c2 = st.columns(2)
+        liga_sel = c1.selectbox("Liga", df_ligas['Nombre de la liga'])
+        id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
+        jor_sel = c2.selectbox("Jornada", list(range(1, 45)))
 
-        # Cargar Equipos de la Liga seleccionada
-        libro_datos = client.open_by_key(id_liga_actual)
+        # Carga de Equipos
+        libro = client.open_by_key(id_actual)
         excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
-        pestanas_validas = [sh.title for sh in libro_datos.worksheets() if sh.title not in excluir]
+        pestanas = [s.title for s in libro.worksheets() if s.title not in excluir]
         
-        listado_local = [t for t in pestanas_validas if "LOCAL" in t.upper()]
-        listado_visitante = [t for t in pestanas_validas if "VISITANTE" in t.upper()]
+        locales = [t for t in pestanas if "LOCAL" in t.upper()]
+        visitantes = [t for t in pestanas if "VISITANTE" in t.upper()]
 
-        def limpiar_nombre(nombre_pestana):
-            return nombre_pestana.replace(" LOCAL", "").replace(" local", "").replace(" VISITANTE", "").replace(" visitante", "").strip()
+        def clean(n): return n.replace(" LOCAL","").replace(" local","").replace(" VISITANTE","").replace(" visitante","").strip()
 
-        col1, col2 = st.columns(2)
-        with col1:
-            local = st.selectbox("Selecciona Local", listado_local, format_func=limpiar_nombre)
-        with col2:
-            equipo_base_sel = limpiar_nombre(local)
-            opciones_v = [v for v in listado_visitante if equipo_base_sel not in v.upper()]
-            visitante = st.selectbox("Selecciona Visitante", opciones_v, format_func=limpiar_nombre)
+        col_l, col_v = st.columns(2)
+        loc = col_l.selectbox("Local", locales, format_func=clean)
+        vis = col_v.selectbox("Visitante", [v for v in visitantes if clean(loc) not in v.upper()], format_func=clean)
         
-        if st.button("CALCULAR PREDICCIÓN"):
-            st.success(f"Analizando: {limpiar_nombre(local)} vs {limpiar_nombre(visitante)}")
-            # Aquí irá la lógica del modelo más adelante
+        if st.button("CALCULAR"):
+            st.success(f"Analizando: {clean(loc)} vs {clean(vis)}")
             
     except Exception as e:
-        st.error(f"Error cargando los datos de la liga: {e}")
+        st.error(f"Error: {e}")
