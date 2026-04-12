@@ -3,6 +3,14 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display:none;}
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
