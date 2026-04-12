@@ -3,9 +3,10 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 
-# 1. Configuración de la página
+# 1. Configuración de la página (DEBE SER LO PRIMERO)
 st.set_page_config(page_title="Sistema Pro Multiliga", layout="wide")
 
+# Ocultar menús de Streamlit
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -15,24 +16,29 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Conexión
+# 2. Configuración de Conexión
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
 
-# 3. Función de verificación (Simplificada al máximo para que no falle)
+# 3. Función de verificación (CORREGIDA A SHEET1)
 def check_user(user_in, pass_in):
     try:
-        sh = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
+        # AQUÍ ESTÁ EL CAMBIO: Ahora busca en "Sheet1" como en tu captura
+        sh = client.open_by_key(ID_CONTROL).worksheet("Sheet1")
         data = sh.get_all_values()
         for fila in data:
-            # Compara usuario (A) y contraseña (B) quitando espacios
-            if str(fila[0]).strip() == str(user_in).strip() and str(fila[1]).strip() == str(pass_in).strip():
+            u_excel = str(fila[0]).strip()
+            p_excel = str(fila[1]).strip()
+            # Limpiamos el .0 que mete Excel en los números
+            if p_excel.endswith('.0'): p_excel = p_excel[:-2]
+            
+            if u_excel == str(user_in).strip() and p_excel == str(pass_in).strip():
                 return True
         return False
-    except:
+    except Exception as e:
         return False
 
 # 4. Lógica de acceso
@@ -49,12 +55,12 @@ if not st.session_state['autenticado']:
                 st.session_state['autenticado'] = True
                 st.rerun()
             else:
-                st.error("Datos incorrectos")
+                st.error("Datos incorrectos. Revisa mayúsculas/minúsculas.")
 else:
     # --- APP PRINCIPAL ---
     st.title("⚽ Análisis Multiliga")
     try:
-        # Carga de Ligas
+        # Carga de Ligas (esta pestaña sí se llama LIGAS según tu captura)
         sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
         df_ligas = pd.DataFrame(sh_ligas.get_all_records())
         
@@ -63,7 +69,7 @@ else:
         id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
         jor_sel = c2.selectbox("Jornada", list(range(1, 45)))
 
-        # Carga de Equipos
+        # Carga de Equipos del libro de la liga seleccionada
         libro = client.open_by_key(id_actual)
         excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
         pestanas = [s.title for s in libro.worksheets() if s.title not in excluir]
