@@ -3,10 +3,10 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 
-# 1. Configuración de la página (DEBE SER LO PRIMERO)
+# 1. Configuración de la página (SIEMPRE PRIMERO)
 st.set_page_config(page_title="Sistema Pro Multiliga", layout="wide")
 
-# Ocultar menús de Streamlit para que parezca una App propia
+# Ocultar menús de Streamlit
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -28,12 +28,6 @@ def check_user(usuario_intento, pass_intento):
     try:
         sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
         usuarios_data = sh_control.get_all_values() 
-        for fila in usuarios_data:
-           # --- FUNCIÓN PARA VERIFICAR USUARIO Y CONTRASEÑA ---
-def check_user(usuario_intento, pass_intento):
-    try:
-        sh_control = client.open_by_key(ID_CONTROL).worksheet("Hoja1")
-        usuarios_data = sh_control.get_all_values() 
         
         for fila in usuarios_data:
             # Convertimos a texto y limpiamos espacios
@@ -49,6 +43,15 @@ def check_user(usuario_intento, pass_intento):
         return False
     except:
         return False
+
+# 4. Estado de autenticación
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+
+# --- INTERFAZ DE LOGIN ---
+if not st.session_state['autenticado']:
+    st.title("🔐 Acceso Privado")
+    with st.form("login_form"):
         user_input = st.text_input("Usuario:")
         pass_input = st.text_input("Contraseña:", type="password")
         submit_button = st.form_submit_button("Entrar")
@@ -85,26 +88,4 @@ else:
         
         pestanas_validas = [sh.title for sh in libro_datos.worksheets() if sh.title not in excluir]
         
-        listado_local = [t for t in pestanas_validas if "LOCAL" in t.upper()]
-        listado_visitante = [t for t in pestanas_validas if "VISITANTE" in t.upper()]
-
-        def limpiar_nombre(nombre_pestana):
-            return nombre_pestana.replace(" LOCAL", "").replace(" local", "").replace(" VISITANTE", "").replace(" visitante", "").strip()
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            local = st.selectbox("Selecciona Local", listado_local, format_func=limpiar_nombre)
-
-        with col2:
-            equipo_base_sel = limpiar_nombre(local)
-            opciones_v = [v for v in listado_visitante if equipo_base_sel not in v.upper()]
-            visitante = st.selectbox("Selecciona Visitante", opciones_v, format_func=limpiar_nombre)
-        
-        # --- BOTÓN DE CÁLCULO ---
-        if st.button("CALCULAR PREDICCIÓN"):
-            st.success(f"Analizando Jornada {jornada_seleccionada}: {limpiar_nombre(local)} vs {limpiar_nombre(visitante)}...")
-            # Aquí conectarás tu modelo XGBoost
-            
-    except Exception as e:
-        st.error(f"Error al cargar datos: {e}")
+        listado
