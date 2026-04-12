@@ -52,13 +52,42 @@ else:
         liga_seleccionada = st.selectbox("Selecciona la Competición", df_ligas['Nombre de la liga'])
         id_liga_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_seleccionada]['ID del libro'].values[0]
         
-        # 2. Cargar Equipos de esa Liga
+      # 2. Cargar Equipos de esa Liga
         libro_datos = client.open_by_key(id_liga_actual)
-        equipos = [sh.title for sh in libro_datos.worksheets()]
         
+        # Pestañas que NO son equipos
+        excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
+        
+        # Obtenemos todas las pestañas válidas
+        pestanas_validas = [sh.title for sh in libro_datos.worksheets() if sh.title not in excluir]
+        
+        # Separamos las pestañas reales de Google Sheets
+        listado_local = [t for t in pestanas_validas if "LOCAL" in t.upper()]
+        listado_visitante = [t for t in pestanas_validas if "VISITANTE" in t.upper()]
+
+        # Función para mostrar solo el nombre del equipo en el menú
+        def limpiar_nombre(nombre_pestana):
+            return nombre_pestana.replace(" LOCAL", "").replace(" local", "").replace(" VISITANTE", "").replace(" visitante", "").strip()
+
         col1, col2 = st.columns(2)
-        with col1: local = st.selectbox("Local", equipos)
-        with col2: visitante = st.selectbox("Visitante", equipos)
+
+        with col1:
+            local = st.selectbox(
+                "Selecciona Local", 
+                listado_local, 
+                format_func=limpiar_nombre  # Aquí ocurre la magia: limpia el nombre solo para la vista
+            )
+
+        with col2:
+            # Filtramos para que no aparezca el mismo equipo que elegiste en Local
+            equipo_base_sel = limpiar_nombre(local)
+            opciones_v = [v for v in listado_visitante if equipo_base_sel not in v.upper()]
+            
+            visitante = st.selectbox(
+                "Selecciona Visitante", 
+                opciones_v, 
+                format_func=limpiar_nombre  # También limpiamos el nombre aquí
+            )
         
         if st.button("CALCULAR PREDICCIÓN"):
             st.success(f"Analizando {local} vs {visitante} en la liga {liga_seleccionada}...")
