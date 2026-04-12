@@ -51,6 +51,10 @@ else:
         
         liga_seleccionada = st.selectbox("Selecciona la Competición", df_ligas['Nombre de la liga'])
         id_liga_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_seleccionada]['ID del libro'].values[0]
+
+        # --- NUEVO: Selección de Jornada ---
+        jornadas = list(range(1, 45))
+        jornada_seleccionada = st.selectbox("Selecciona la Jornada", jornadas)
         
       # 2. Cargar Equipos de esa Liga
         libro_datos = client.open_by_key(id_liga_actual)
