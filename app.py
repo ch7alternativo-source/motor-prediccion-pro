@@ -4,7 +4,7 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 import numpy as np
 
-# --- 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS (OPTIMIZADO MÓVIL/MODO NOCHE) ---
+# --- 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS MEJORADOS ---
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
 
 st.markdown("""
@@ -13,42 +13,60 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Contenedores adaptables */
+    /* Título Principal - Azul profundo y fuerte */
+    .main-title {
+        text-align: center;
+        color: #1f3b4d;
+        font-size: 2.2rem;
+        font-weight: 800;
+        margin-bottom: 25px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-family: 'Arial Black', Gadget, sans-serif;
+    }
+
+    /* Contenedores de métricas adaptables */
     .stMetric {
-        background-color: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(128, 128, 128, 0.3);
+        background-color: rgba(255, 255, 255, 0.95);
+        border: 1px solid #e0e0e0;
         padding: 15px;
         border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
     
-    /* Forzar visibilidad de números en modo noche */
+    /* Números de métricas (Rojo vibrante y grande) */
     [data-testid="stMetricValue"] {
         color: #ff4b4b !important;
-        font-size: 1.8rem !important;
-        font-weight: bold;
+        font-size: 2.2rem !important;
+        font-weight: 800 !important;
     }
     
-    /* Forzar visibilidad de etiquetas */
+    /* Etiquetas de métricas (Gris oscuro legible) */
     [data-testid="stMetricLabel"] {
-        color: #e0e0e0 !important;
-        font-size: 1rem !important;
+        color: #333333 !important;
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
     }
 
+    /* Encabezados de sección - Recuperando el estilo visual potente */
     .section-header {
-        color: #ffffff;
-        font-size: 1.1rem;
-        font-weight: bold;
-        border-left: 6px solid #ff4b4b;
-        padding: 8px 12px;
-        margin: 20px 0 10px 0;
-        background-color: rgba(255, 75, 75, 0.15);
-        border-radius: 0 8px 8px 0;
+        color: #1f3b4d;
+        font-size: 1.3rem;
+        font-weight: 800;
+        border-left: 10px solid #ff4b4b;
+        padding: 12px 18px;
+        margin: 35px 0 15px 0;
+        background-color: #fce8e8; /* Fondo suave para resaltar el texto oscuro */
+        border-radius: 4px;
+        text-transform: uppercase;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
     }
 
-    /* Ajuste de tablas para que no se corten en el móvil */
+    /* Ajuste de tablas */
     .stTable {
-        background-color: transparent;
-        font-size: 12px !important;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid #eeeeee;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -89,10 +107,9 @@ if not st.session_state['autenticado']:
                 st.error("Datos incorrectos")
 else:
     # --- 4. INTERFAZ PRINCIPAL ---
-    st.markdown("<h1 style='text-align: center; color: #ff4b4b;'>⚽ ANALIZADOR DE PARTIDOS PRO</h1>", unsafe_allow_html=True)
+    st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
     
     try:
-        # Lectura de la hoja de LIGAS en el Control de Usuarios
         sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
         df_ligas = pd.DataFrame(sh_ligas.get_all_records())
         
@@ -101,7 +118,6 @@ else:
         id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
         jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
 
-        # Abrir el libro de la liga seleccionada
         libro = client.open_by_key(id_actual)
         excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
         pestanas = [s.title for s in libro.worksheets() if s.title not in excluir]
@@ -118,10 +134,9 @@ else:
         if st.button("📊 GENERAR ANÁLISIS"):
             st.divider()
             
-            # SECCIÓN 1: PROBABILIDADES (1X2)
+            # SECCIÓN 1: PROBABILIDAD (1X2)
             st.markdown("<div class='section-header'>🏆 PROBABILIDAD DE RESULTADO (1X2)</div>", unsafe_allow_html=True)
             r1, r2, r3 = st.columns(3)
-            # Aquí irá la lógica del XGBoost y 5 bloques en el futuro
             r1.metric("Victoria Local", "45%")
             r2.metric("Empate", "25%")
             r3.metric("Victoria Visitante", "30%")
@@ -133,10 +148,9 @@ else:
             g2.metric("Más de 2.5 Goles", "55%")
             g3.metric("Ambos Marcan (SÍ)", "62%")
             
-            # SECCIÓN 3: TABLA DETALLADA CON PARADAS INCLUIDAS
+            # SECCIÓN 3: TABLA DETALLADA CON PARADAS
             st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
             
-            # Métrica intercalada incluyendo PARADAS debajo de Remates a Puerta
             datos_intercalados = {
                 "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
                 "Local (FVL)": ["1.4", "12.2", "4.8", "3.2", "5.1", "2.1"],
@@ -149,4 +163,4 @@ else:
             st.table(pd.DataFrame(datos_intercalados))
 
     except Exception as e:
-        st.error(f"Error en la carga o procesamiento: {e}")
+        st.error(f"Error en el sistema: {e}")
