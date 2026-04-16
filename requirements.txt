@@ -1,6 +1,10 @@
 streamlit
 pandas
+numpy
+scikit-learn
 xgboost
+joblib
 gspread
 google-auth
 google-auth-oauthlib
+oauth2client
