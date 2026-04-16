@@ -293,19 +293,23 @@ else:
             )
         return final
 
-    def poisson(lam, k):
-        return (lam**k * exp(-lam)) / factorial(k)
+def poisson(lam, k):
+    return (lam**k * exp(-lam)) / factorial(k)
 
-    def prob_1x2(gL, gV):
-        max_g = 10
-        pL = pE = pV = 0
+def prob_1x2(gL, gV):
+    max_g = 10
+    pL = pE = pV = 0
 
-        for i in range(max_g + 1):
-            for j in range(max_g + 1):
-                p = poisson(gL, i) * poisson(gV, j)
-                if i > j: pL += p
-                elif i == j: pE += p
-                else: pV += p
+    for i in range(max_g + 1):
+        for j in range(max_g + 1):
+            p = poisson(gL, i) * poisson(gV, j)
+            if i > j:
+                pL += p
+            elif i == j:
+                pE += p
+            else:
+                pV += p
+
     return pL, pE, pV
 
 
