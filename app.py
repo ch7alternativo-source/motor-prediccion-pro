@@ -312,7 +312,7 @@ else:
 RUTA_MODELOS = "models"
 
 
-   def cargar_modelo(nombre_fichero):
+def cargar_modelo(nombre_fichero):
 
         ruta = os.path.join(RUTA_MODELOS, nombre_fichero)
         if not os.path.exists(ruta):
