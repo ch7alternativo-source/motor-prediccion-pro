@@ -401,12 +401,12 @@ try:
         g2.metric("Más de 2.5 Goles", f"{p_over25*100:.1f}%")
         g3.metric("Ambos Marcan (SÍ)", f"{p_btts*100:.1f}%")
 
-        st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=Tru
+        st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
                     
-    tabla = {
-    "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
+        tabla = {
+        "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
 
-    "Local (FVL)": [
+        "Local (FVL)": [
         f"{metricas_finales['goles_local']:.2f}",
         f"{metricas_finales['remates_totales_local']:.2f}",
         f"{metricas_finales['remates_puerta_local']:.2f}",
@@ -415,7 +415,7 @@ try:
         f"{metricas_finales['tarjetas_local']:.2f}"
     ],
 
-    "Visitante (FVV)": [
+        "Visitante (FVV)": [
         f"{metricas_finales['goles_visitante']:.2f}",
         f"{metricas_finales['remates_totales_visitante']:.2f}",
         f"{metricas_finales['remates_puerta_visitante']:.2f}",
@@ -424,7 +424,7 @@ try:
         f"{metricas_finales['tarjetas_visitante']:.2f}"
     ],
 
-    "Total Partido": [
+        "Total Partido": [
         f"{metricas_finales['goles_partido']:.2f}",
         f"{metricas_finales['remates_totales_partido']:.2f}",
         f"{metricas_finales['remates_puerta_partido']:.2f}",
@@ -434,7 +434,7 @@ try:
     ]
 }
 
-st.table(pd.DataFrame(tabla))
+       st.table(pd.DataFrame(tabla))
 
-except Exception as e:
-    st.error(f"Error: {e}")
+       except Exception as e:
+         st.error(f"Error: {e}")
