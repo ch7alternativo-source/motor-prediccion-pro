@@ -403,139 +403,143 @@ def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
 st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
 
 try:
-        sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
-        df_ligas = pd.DataFrame(sh_ligas.get_all_records())
-        
-        col1, col2 = st.columns(2)
-        liga_sel = col1.selectbox("🏆 Seleccionar Liga", df_ligas['Nombre de la liga'])
-        id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
-        jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
+    sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
+    df_ligas = pd.DataFrame(sh_ligas.get_all_records())
+    
+    col1, col2 = st.columns(2)
+    liga_sel = col1.selectbox("🏆 Seleccionar Liga", df_ligas['Nombre de la liga'])
+    id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
+    jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
 
-        libro = client.open_by_key(id_actual)
-        excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
-        pestanas = [s.title for s in libro.worksheets() if s.title not in excluir]
+    libro = client.open_by_key(id_actual)
+    excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
+    pestanas = [s.title for s in libro.worksheets() if s.title not in excluir]
 
-        locales = [t for t in pestanas if "LOCAL" in t.upper()]
-        visitantes = [t for t in pestanas if "VISITANTE" in t.upper()]
+    locales = [t for t in pestanas if "LOCAL" in t.upper()]
+    visitantes = [t for t in pestanas if "VISITANTE" in t.upper()]
 
-        def clean(n): 
-            return n.replace(" LOCAL","").replace(" local","").replace(" VISITANTE","").replace(" visitante","").strip()
+    def clean(n): 
+        return n.replace(" LOCAL","").replace(" local","").replace(" VISITANTE","").replace(" visitante","").strip()
 
-        cl, cv = st.columns(2)
-        eq_l = cl.selectbox("🏠 Equipo Local", locales, format_func=clean)
-        eq_v = cv.selectbox("🚀 Equipo Visitante", [v for v in visitantes if clean(eq_l) not in v.upper()], format_func=clean)
+    cl, cv = st.columns(2)
+    eq_l = cl.selectbox("🏠 Equipo Local", locales, format_func=clean)
+    eq_v = cv.selectbox("🚀 Equipo Visitante", [v for v in visitantes if clean(eq_l) not in v.upper()], format_func=clean)
 
-        if st.button("📊 GENERAR ANÁLISIS"):
+    if st.button("📊 GENERAR ANÁLISIS"):
 
-            st.divider()
+        st.divider()
 
-            # 1. Cargar pestañas
-            ws_local = libro.worksheet(eq_l)
-            ws_visit = libro.worksheet(eq_v)
+        # 1. Cargar pestañas
+        ws_local = libro.worksheet(eq_l)
+        ws_visit = libro.worksheet(eq_v)
 
-            df_local = cargar_pestana_equipo(ws_local)
-            df_visit = cargar_pestana_equipo(ws_visit)
+        df_local = cargar_pestana_equipo(ws_local)
+        df_visit = cargar_pestana_equipo(ws_visit)
 
-            # 2. Clasificación
-            todas = {}
-            for p in pestanas:
-                ws = libro.worksheet(p)
-                dfp = cargar_pestana_equipo(ws)
-                equipo = p.replace(" LOCAL", "").replace(" VISITANTE", "")
-                if equipo not in todas:
-                    todas[equipo] = dfp
+        # 2. Clasificación
+        todas = {}
+        for p in pestanas:
+            ws = libro.worksheet(p)
+            dfp = cargar_pestana_equipo(ws)
+            equipo = p.replace(" LOCAL", "").replace(" VISITANTE", "")
+            if equipo not in todas:
+                todas[equipo] = dfp
 
-            clasif = calcular_clasificacion(todas)
+        clasif = calcular_clasificacion(todas)
 
-            pos_local = clasif[clasif["EQUIPO"] == clean(eq_l)]["POS"].values[0]
-            pos_visit = clasif[clasif["EQUIPO"] == clean(eq_v)]["POS"].values[0]
+        pos_local = clasif[clasif["EQUIPO"] == clean(eq_l)]["POS"].values[0]
+        pos_visit = clasif[clasif["EQUIPO"] == clean(eq_v)]["POS"].values[0]
 
-            def grupo(pos):
-                if 1 <= pos <= 4: return [1,2,3,4]
-                if 5 <= pos <= 10: return [5,6,7,8,9,10]
-                if 11 <= pos <= 16: return [11,12,13,14,15,16]
-                return list(range(17,26))
+        def grupo(pos):
+            if 1 <= pos <= 4: return [1,2,3,4]
+            if 5 <= pos <= 10: return [5,6,7,8,9,10]
+            if 11 <= pos <= 16: return [11,12,13,14,15,16]
+            return list(range(17,26))
 
-            grupo_local = grupo(pos_visit)
-            grupo_visit = grupo(pos_local)
+        grupo_local = grupo(pos_visit)
+        grupo_visit = grupo(pos_local)
 
-            # 3. Bloques
-            bloques_local = []
+        # 3. Bloques
+        bloques_local = []
 
-            for b in [1,2,3,4,5]:
-                dfL_b = filtrar_bloque(df_local, b, True, grupo_local if b == 5 else None)
-                dfV_b = filtrar_bloque(df_visit, b, False, grupo_visit if b == 5 else None)
+        for b in [1,2,3,4,5]:
+            dfL_b = filtrar_bloque(df_local, b, True, grupo_local if b == 5 else None)
+            dfV_b = filtrar_bloque(df_visit, b, False, grupo_visit if b == 5 else None)
 
-                metricas_b = calcular_metricas(dfL_b, dfV_b, jor_sel)
-                bloques_local.append(metricas_b)
+            metricas_b = calcular_metricas(dfL_b, dfV_b, jor_sel)
+            bloques_local.append(metricas_b)
 
-            # 4. Rama métrica
-            b1, b2, b3, b4, b5 = bloques_local
-            metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
+        # 4. Rama métrica
+        b1, b2, b3, b4, b5 = bloques_local
+        metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
 
-            # 5. Rama ML
-            metricas_ml = predecir_ml_metricas(df_local, df_visit)
+        # 5. Rama ML
+        metricas_ml = predecir_ml_metricas(df_local, df_visit)
 
-            # 6. COMBINACIÓN MÉTRICA + ML
-            metricas_finales, usado_ml = combinar_metrica_y_ml(metricas_metrica, metricas_ml, jor_sel)
+        # 6. COMBINACIÓN MÉTRICA + ML
+        metricas_finales, usado_ml = combinar_metrica_y_ml(metricas_metrica, metricas_ml, jor_sel)
 
-            if not usado_ml:
-                st.info("Rama ML no activa (no hay modelos XGBoost). Usando solo rama métrica.")
+        if not usado_ml:
+            st.info("Rama ML no activa (no hay modelos XGBoost). Usando solo rama métrica.")
 
-            # 7. Probabilidad 1X2
-            gL = metricas_finales["goles_local"]
-            gV = metricas_finales["goles_visitante"]
+        # 7. Probabilidad 1X2
+        gL = metricas_finales["goles_local"]
+        gV = metricas_finales["goles_visitante"]
 
-            pL, pE, pV = prob_1x2(gL, gV)
+        pL, pE, pV = prob_1x2(gL, gV)
 
-            st.markdown("<div class='section-header'>🏆 PROBABILIDAD DE RESULTADO (1X2)</div>", unsafe_allow_html=True)
-            r1, r2, r3 = st.columns(3)
-            r1.metric("Victoria Local", f"{pL*100:.1f}%")
-            r2.metric("Empate", f"{pE*100:.1f}%")
-            r3.metric("Victoria Visitante", f"{pV*100:.1f}%")
+        st.markdown("<div class='section-header'>🏆 PROBABILIDAD DE RESULTADO (1X2)</div>", unsafe_allow_html=True)
+        r1, r2, r3 = st.columns(3)
+        r1.metric("Victoria Local", f"{pL*100:.1f}%")
+        r2.metric("Empate", f"{pE*100:.1f}%")
+        r3.metric("Victoria Visitante", f"{pV*100:.1f}%")
 
-            # MERCADOS DE GOLES
-            st.markdown("<div class='section-header'>🔥 MERCADOS DE GOLES PRINCIPALES</div>", unsafe_allow_html=True)
+        # MERCADOS DE GOLES
+        st.markdown("<div class='section-header'>🔥 MERCADOS DE GOLES PRINCIPALES</div>", unsafe_allow_html=True)
 
-            p_over15 = 1 - (poisson(gL+gV,0) + poisson(gL+gV,1))
-            p_over25 = 1 - (poisson(gL+gV,0) + poisson(gL+gV,1) + poisson(gL+gV,2))
-            p_btts = (1 - poisson(gL,0)) * (1 - poisson(gV,0))
+        p_over15 = 1 - (poisson(gL+gV,0) + poisson(gL+gV,1))
+        p_over25 = 1 - (poisson(gL+gV,0) + poisson(gL+gV,1) + poisson(gL+gV,2))
+        p_btts = (1 - poisson(gL,0)) * (1 - poisson(gV,0))
 
-            g1, g2, g3 = st.columns(3)
-            g1.metric("Más de 1.5 Goles", f"{p_over15*100:.1f}%")
-            g2.metric("Más de 2.5 Goles", f"{p_over25*100:.1f}%")
-            g3.metric("Ambos Marcan (SÍ)", f"{p_btts*100:.1f}%")
+        g1, g2, g3 = st.columns(3)
+        g1.metric("Más de 1.5 Goles", f"{p_over15*100:.1f}%")
+        g2.metric("Más de 2.5 Goles", f"{p_over25*100:.1f}%")
+        g3.metric("Ambos Marcan (SÍ)", f"{p_btts*100:.1f}%")
 
-# TABLA DETALLADA
-st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
+        # TABLA DETALLADA
+        st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
 
-tabla = {
-    "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
-    "Local (FVL)": [
-        f"{metricas_finales['goles_local']:.2f}",
-        f"{metricas_finales['remates_totales_local']:.2f}",
-        f"{metricas_finales['remates_puerta_local']:.2f}",
-        f"{metricas_finales['paradas_local']:.2f}",
-        f"{metricas_finales['corners_local']:.2f}",
-        f"{metricas_finales['tarjetas_local']:.2f}"
-    ],
-    "Visitante (FVV)": [
-        f"{metricas_finales['goles_visitante']:.2f}",
-        f"{metricas_finales['remates_totales_visitante']:.2f}",
-        f"{metricas_finales['remates_puerta_visitante']:.2f}",
-        f"{metricas_finales['paradas_visitante']:.2f}",
-        f"{metricas_finales['corners_visitante']:.2f}",
-        f"{metricas_finales['tarjetas_visitante']:.2f}"
-    ],
-    "Total Partido": [
-        f"{metricas_finales['goles_partido']:.2f}",
-        f"{metricas_finales['remates_totales_partido']:.2f}",
-        f"{metricas_finales['remates_puerta_partido']:.2f}",
-        f"{metricas_finales['paradas_partido']:.2f}",
-        f"{metricas_finales['corners_partido']:.2f}",
-        f"{metricas_finales['tarjetas_partido']:.2f}"
-    ]
-}
+        tabla = {
+            "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
+            "Local (FVL)": [
+                f"{metricas_finales['goles_local']:.2f}",
+                f"{metricas_finales['remates_totales_local']:.2f}",
+                f"{metricas_finales['remates_puerta_local']:.2f}",
+                f"{metricas_finales['paradas_local']:.2f}",
+                f"{metricas_finales['corners_local']:.2f}",
+                f"{metricas_finales['tarjetas_local']:.2f}"
+            ],
+            "Visitante (FVV)": [
+                f"{metricas_finales['goles_visitante']:.2f}",
+                f"{metricas_finales['remates_totales_visitante']:.2f}",
+                f"{metricas_finales['remates_puerta_visitante']:.2f}",
+                f"{metricas_finales['paradas_visitante']:.2f}",
+                f"{metricas_finales['corners_visitante']:.2f}",
+                f"{metricas_finales['tarjetas_visitante']:.2f}"
+            ],
+            "Total Partido": [
+                f"{metricas_finales['goles_partido']:.2f}",
+                f"{metricas_finales['remates_totales_partido']:.2f}",
+                f"{metricas_finales['remates_puerta_partido']:.2f}",
+                f"{metricas_finales['paradas_partido']:.2f}",
+                f"{metricas_finales['corners_partido']:.2f}",
+                f"{metricas_finales['tarjetas_partido']:.2f}"
+            ]
+        }
 
-st.table(pd.DataFrame(tabla))
+        st.table(pd.DataFrame(tabla))
+
+except Exception as e:
+    st.error(f"Error: {e}")
+
 
