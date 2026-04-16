@@ -306,9 +306,11 @@ else:
                 if i > j: pL += p
                 elif i == j: pE += p
                 else: pV += p
+    return pL, pE, pV
 
-        return pL, pE, 
- RUTA_MODELOS = "models"
+
+RUTA_MODELOS = "models"
+
 
     def cargar_modelo(nombre_fichero):
         ruta = os.path.join(RUTA_MODELOS, nombre_fichero)
