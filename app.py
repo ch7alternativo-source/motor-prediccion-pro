@@ -155,9 +155,11 @@ else:
             prev = row
             pos_real += 1
 
-        clasif["POS"] = posiciones
-        return 
-  def cargar_pestana_equipo(ws):
+               clasif["POS"] = posiciones
+        return clasif
+
+
+    def cargar_pestana_equipo(ws):
         data = ws.get_all_records()
         df = pd.DataFrame(data)
 
