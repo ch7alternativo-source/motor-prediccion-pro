@@ -404,6 +404,32 @@ try:
         st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
 
         tabla = {
-            "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
-            "Local (FVL)": [
-                f"{metricas_finales['goles_local']:.2f}",
+    "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
+
+    "Local (FVL)": [
+        f"{metricas_finales['goles_local']:.2f}",
+        f"{metricas_finales['remates_totales_local']:.2f}",
+        f"{metricas_finales['remates_puerta_local']:.2f}",
+        f"{metricas_finales['paradas_local']:.2f}",
+        f"{metricas_finales['corners_local']:.2f}",
+        f"{metricas_finales['tarjetas_local']:.2f}"
+    ],
+
+    "Visitante (FVV)": [
+        f"{metricas_finales['goles_visitante']:.2f}",
+        f"{metricas_finales['remates_totales_visitante']:.2f}",
+        f"{metricas_finales['remates_puerta_visitante']:.2f}",
+        f"{metricas_finales['paradas_visitante']:.2f}",
+        f"{metricas_finales['corners_visitante']:.2f}",
+        f"{metricas_finales['tarjetas_visitante']:.2f}"
+    ],
+
+    "Total Partido": [
+        f"{metricas_finales['goles_partido']:.2f}",
+        f"{metricas_finales['remates_totales_partido']:.2f}",
+        f"{metricas_finales['remates_puerta_partido']:.2f}",
+        f"{metricas_finales['paradas_partido']:.2f}",
+        f"{metricas_finales['corners_partido']:.2f}",
+        f"{metricas_finales['tarjetas_partido']:.2f}"
+    ]
+}
