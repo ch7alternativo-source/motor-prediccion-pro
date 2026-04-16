@@ -322,7 +322,7 @@ def cargar_modelo(nombre_fichero):
         except:
             return None
 
-    def construir_features_equipo(df):
+def construir_features_equipo(df):
         feats = {}
         cols_numericas = [c for c in df.columns if c not in ["RIVAL", "FECHA"]]
 
@@ -332,7 +332,7 @@ def cargar_modelo(nombre_fichero):
 
         return pd.DataFrame([feats])
 
-    def predecir_ml_metricas(df_local, df_visit):
+def predecir_ml_metricas(df_local, df_visit):
         X_local = construir_features_equipo(df_local)
         X_visit = construir_features_equipo(df_visit)
 
@@ -385,7 +385,7 @@ def cargar_modelo(nombre_fichero):
 
         return resultados_ml
 
-    def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
+def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
         if metricas_ml is None:
             return metricas_metrica, False
 
