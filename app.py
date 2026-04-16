@@ -52,17 +52,21 @@ def cargar_pestana_equipo(ws):
     data = ws.get_all_records()
     df = pd.DataFrame(data)
 
+    if df.empty or len(df.columns) == 0:
+        return pd.DataFrame()
+
+    df.columns = [c.strip().upper() for c in df.columns]
+
     if "FECHA" in df.columns:
         df["FECHA"] = pd.to_datetime(df["FECHA"], errors="coerce")
+        df = df.dropna(subset=["FECHA"])
+        df = df.sort_values("FECHA")
 
     for col in df.columns:
         if col != "RIVAL":
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    df = df.dropna(subset=["FECHA"])
-    df = df.sort_values("FECHA")
     return df
-
 
 def calcular_clasificacion(todas_pestanas):
     tabla = []
@@ -342,6 +346,8 @@ try:
         for p in pestanas:
             ws = libro.worksheet(p)
             dfp = cargar_pestana_equipo(ws)
+            if dfp.empty:       # ← nueva
+                continue        # ← nueva
             equipo = p.replace(" LOCAL", "").replace(" VISITANTE", "")
             if equipo not in todas:
                 todas[equipo] = dfp
