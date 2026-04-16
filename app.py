@@ -47,10 +47,7 @@ if not st.session_state['autenticado']:
 
     st.stop()   # ← AQUÍ TERMINA EL LOGIN
 
-# ============================================================
-# ===============   MOTOR MÉTRICO (RAMA 1)   =================
-# ============================================================
-
+# MOTOR MÉTRICO (RAMA 1)
 def cargar_pestana_equipo(ws):
     data = ws.get_all_records()
     df = pd.DataFrame(data)
