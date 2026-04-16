@@ -402,7 +402,7 @@ def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
         return final, 
 st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
 
-    try:
+try:
         sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
         df_ligas = pd.DataFrame(sh_ligas.get_all_records())
         
