@@ -103,8 +103,9 @@ if not st.session_state['autenticado']:
                 st.rerun()
             else:
                 st.error("Datos incorrectos")
-else:
-st.stop()
+
+    st.stop()   # ← ESTA LÍNEA ES LA QUE FALTABA
+
 
     
     # ============================================================
