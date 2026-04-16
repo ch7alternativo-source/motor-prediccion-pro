@@ -506,7 +506,7 @@ try:
             g2.metric("Más de 2.5 Goles", f"{p_over25*100:.1f}%")
             g3.metric("Ambos Marcan (SÍ)", f"{p_btts*100:.1f}%")
 
-            # TABLA DETALLADA
+# TABLA DETALLADA
 st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
 
 tabla = {
@@ -538,3 +538,12 @@ tabla = {
 }
 
 st.table(pd.DataFrame(tabla))
+
+# CIERRE DEL TRY QUE ESTABA ABIERTO ARRIBA
+except Exception as e:
+    st.error(f"Error: {e}")
+
+    ],
+    "Total Partido": [
+        f"{metricas_finales['goles_partido']:.2f}",
+        f"{metricas_fina
