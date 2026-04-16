@@ -536,8 +536,8 @@ try:
                     f"{metricas_finales['tarjetas_partido']:.2f}",
                 ]
             }
-            
- try:
+
+try:
     st.table(pd.DataFrame(tabla))
 except Exception as e:
     st.error(f"Error: {e}")
