@@ -104,7 +104,7 @@ if not st.session_state['autenticado']:
             else:
                 st.error("Datos incorrectos")
 else:
-    # ============================================================
+        # ============================================================
     # ===============   MOTOR MÉTRICO (RAMA 1)   =================
     # ============================================================
 
@@ -258,7 +258,7 @@ else:
                 else: pV += p
 
         return pL, pE, pV
-    # ============================================================
+            # ============================================================
     # ===============   MOTOR ML (RAMA 2)   ======================
     # ============================================================
 
@@ -351,7 +351,7 @@ else:
                 final[k] = alpha_m * v + alpha_ml * ml_val
 
         return final, True
-            # ============================================================
+    # ============================================================
     # ===============   INTERFAZ PRINCIPAL   =====================
     # ============================================================
 
@@ -418,5 +418,12 @@ else:
             bloques_local = []
 
             for b in [1,2,3,4,5]:
+                dfL_b = filtrar_bloque(df_local, b, True, grupo_local if b == 5 else None)
+                dfV_b = filtrar_bloque(df_visit, b, False, grupo_visit if b == 5 else None)
 
+                metricas_b = calcular_metricas(dfL_b, dfV_b, jor_sel)
+                bloques_local.append(metricas_b)
 
+            # 4. Rama métrica
+            b1, b2, b3, b4, b5 = bloques_local
+            metricas_metrica =
