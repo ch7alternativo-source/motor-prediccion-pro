@@ -8,7 +8,6 @@ from xgboost import XGBRegressor
 import joblib
 import os
 
-
 # --- 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS ---
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
 
@@ -70,13 +69,11 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-
 # --- 2. CONEXIÓN A GOOGLE SHEETS ---
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
-
 
 def check_user(user_in, pass_in):
     try:
@@ -91,11 +88,9 @@ def check_user(user_in, pass_in):
     except:
         return False
 
-
 # --- 3. SESIÓN ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
-
 
 if not st.session_state['autenticado']:
     st.markdown("<h2 style='text-align: center;'>🔐 Acceso al Sistema</h2>", unsafe_allow_html=True)
@@ -108,9 +103,7 @@ if not st.session_state['autenticado']:
                 st.rerun()
             else:
                 st.error("Datos incorrectos")
-
 else:
-
     # ============================================================
     # ===============   MOTOR MÉTRICO (RAMA 1)   =================
     # ============================================================
@@ -129,7 +122,6 @@ else:
         df = df.dropna(subset=["FECHA"])
         df = df.sort_values("FECHA")
         return df
-
 
     def calcular_clasificacion(todas_pestanas):
         tabla = []
@@ -165,7 +157,6 @@ else:
         clasif["POS"] = posiciones
         return clasif
 
-
     def filtrar_bloque(df, tipo, es_local, grupo=None):
         if tipo == 1:
             return df.copy()
@@ -181,14 +172,12 @@ else:
             return df[df["POSICION RIVAL"].isin(grupo)].copy()
         return df.copy()
 
-
     def limpiar_ruido(lista):
         lista = [x for x in lista if pd.notna(x)]
         if len(lista) <= 2:
             return lista
         lista = sorted(lista)
         return lista[1:-1]
-
 
     def calcular_metricas(dfL, dfV, jornada):
         metricas = {}
@@ -234,7 +223,6 @@ else:
 
         return metricas
 
-
     def pesos_por_jornada(j):
         if j <= 5: return (0.2, 0.8)
         if j <= 10: return (0.3, 0.7)
@@ -242,7 +230,6 @@ else:
         if j <= 20: return (0.5, 0.5)
         if j <= 30: return (0.6, 0.4)
         return (0.65, 0.35)
-
 
     def combinar_bloques(b1, b2, b3, b4, b5):
         final = {}
@@ -256,10 +243,8 @@ else:
             )
         return final
 
-
     def poisson(lam, k):
         return (lam**k * exp(-lam)) / factorial(k)
-
 
     def prob_1x2(gL, gV):
         max_g = 10
@@ -273,8 +258,6 @@ else:
                 else: pV += p
 
         return pL, pE, pV
-
-
     # ============================================================
     # ===============   MOTOR ML (RAMA 2)   ======================
     # ============================================================
@@ -290,7 +273,6 @@ else:
         except:
             return None
 
-
     def construir_features_equipo(df):
         feats = {}
         cols_numericas = [c for c in df.columns if c not in ["RIVAL", "FECHA"]]
@@ -300,7 +282,6 @@ else:
             feats[f"{col}_std"] = df[col].std()
 
         return pd.DataFrame([feats])
-
 
     def predecir_ml_metricas(df_local, df_visit):
         X_local = construir_features_equipo(df_local)
@@ -355,7 +336,6 @@ else:
 
         return resultados_ml
 
-
     def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
         if metricas_ml is None:
             return metricas_metrica, False
@@ -371,9 +351,7 @@ else:
                 final[k] = alpha_m * v + alpha_ml * ml_val
 
         return final, True
-
-
-    # ============================================================
+            # ============================================================
     # ===============   INTERFAZ PRINCIPAL   =====================
     # ============================================================
 
@@ -440,15 +418,5 @@ else:
             bloques_local = []
 
             for b in [1,2,3,4,5]:
-                dfL_b = filtrar_bloque(df_local, b, True, grupo_local if b == 5 else None)
-                dfV_b = filtrar_bloque(df_visit, b, False, grupo_visit if b == 5 else None)
 
-                metricas_b = calcular_metricas(dfL_b, dfV_b, jor_sel)
-                bloques_local.append(metricas_b)
 
-            # 4. Rama métrica
-            b1, b2, b3, b4, b5 = bloques_local
-            metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
-
-            # 5. Rama ML
-            metricas_ml = predec
