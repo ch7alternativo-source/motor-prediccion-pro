@@ -517,7 +517,7 @@ tabla = {
         f"{metricas_finales['remates_puerta_local']:.2f}",
         f"{metricas_finales['paradas_local']:.2f}",
         f"{metricas_finales['corners_local']:.2f}",
-        f"{metricas_finales['tarjetas_local']:.2f}",
+        f"{metricas_finales['tarjetas_local']:.2f}"
     ],
     "Visitante (FVV)": [
         f"{metricas_finales['goles_visitante']:.2f}",
@@ -525,7 +525,7 @@ tabla = {
         f"{metricas_finales['remates_puerta_visitante']:.2f}",
         f"{metricas_finales['paradas_visitante']:.2f}",
         f"{metricas_finales['corners_visitante']:.2f}",
-        f"{metricas_finales['tarjetas_visitante']:.2f}",
+        f"{metricas_finales['tarjetas_visitante']:.2f}"
     ],
     "Total Partido": [
         f"{metricas_finales['goles_partido']:.2f}",
@@ -533,17 +533,9 @@ tabla = {
         f"{metricas_finales['remates_puerta_partido']:.2f}",
         f"{metricas_finales['paradas_partido']:.2f}",
         f"{metricas_finales['corners_partido']:.2f}",
-        f"{metricas_finales['tarjetas_partido']:.2f}",
+        f"{metricas_finales['tarjetas_partido']:.2f}"
     ]
 }
 
 st.table(pd.DataFrame(tabla))
 
-# CIERRE DEL TRY QUE ESTABA ABIERTO ARRIBA
-except Exception as e:
-    st.error(f"Error: {e}")
-
-    ],
-    "Total Partido": [
-        f"{metricas_finales['goles_partido']:.2f}",
-        f"{metricas_fina
