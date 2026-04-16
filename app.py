@@ -104,11 +104,60 @@ if not st.session_state['autenticado']:
             else:
                 st.error("Datos incorrectos")
 else:
-        # ============================================================
+
+    # ============================================================
     # ===============   MOTOR MÉTRICO (RAMA 1)   =================
     # ============================================================
 
     def cargar_pestana_equipo(ws):
+        data = ws.get_all_records()
+        df = pd.DataFrame(data)
+
+        if "FECHA" in df.columns:
+            df["FECHA"] = pd.to_datetime(df["FECHA"], errors="coerce")
+
+        for col in df.columns:
+            if col != "RIVAL":
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        df = df.dropna(subset=["FECHA"])
+        df = df.sort_values("FECHA")
+        return df
+
+    def calcular_clasificacion(todas_pestanas):
+        tabla = []
+
+        for equipo, df in todas_pestanas.items():
+            puntos = 0
+            gf = df["GOL FAVOR"].sum()
+            gc = df["GOL CONTRA"].sum()
+
+            for _, row in df.iterrows():
+                if row["GOL FAVOR"] > row["GOL CONTRA"]:
+                    puntos += 3
+                elif row["GOL FAVOR"] == row["GOL CONTRA"]:
+                    puntos += 1
+
+            tabla.append([equipo, puntos, gf, gc, gf - gc])
+
+        clasif = pd.DataFrame(tabla, columns=["EQUIPO", "PUNTOS", "GF", "GC", "DG"])
+        clasif = clasif.sort_values(["PUNTOS", "DG", "GF"], ascending=False)
+
+        posiciones = []
+        pos_real = 1
+        prev = None
+
+        for _, row in clasif.iterrows():
+            if prev and row["PUNTOS"] == prev["PUNTOS"]:
+                posiciones.append(pos_real - 1)
+            else:
+                posiciones.append(pos_real)
+            prev = row
+            pos_real += 1
+
+        clasif["POS"] = posiciones
+        return 
+  def cargar_pestana_equipo(ws):
         data = ws.get_all_records()
         df = pd.DataFrame(data)
 
@@ -257,12 +306,8 @@ else:
                 elif i == j: pE += p
                 else: pV += p
 
-        return pL, pE, pV
-            # ============================================================
-    # ===============   MOTOR ML (RAMA 2)   ======================
-    # ============================================================
-
-    RUTA_MODELOS = "models"
+        return pL, pE, 
+ RUTA_MODELOS = "models"
 
     def cargar_modelo(nombre_fichero):
         ruta = os.path.join(RUTA_MODELOS, nombre_fichero)
@@ -350,12 +395,8 @@ else:
             else:
                 final[k] = alpha_m * v + alpha_ml * ml_val
 
-        return final, True
-    # ============================================================
-    # ===============   INTERFAZ PRINCIPAL   =====================
-    # ============================================================
-
-    st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
+        return final, 
+st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
 
     try:
         sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
@@ -426,4 +467,73 @@ else:
 
             # 4. Rama métrica
             b1, b2, b3, b4, b5 = bloques_local
-            metricas_metrica =
+            metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
+
+            # 5. Rama ML
+            metricas_ml = predecir_ml_metricas(df_local, df_visit)
+
+            # 6. COMBINACIÓN MÉTRICA + ML
+            metricas_finales, usado_ml = combinar_metrica_y_ml(metricas_metrica, metricas_ml, jor_sel)
+
+            if not usado_ml:
+                st.info("Rama ML no activa (no hay modelos XGBoost). Usando solo rama métrica.")
+
+            # 7. Probabilidad 1X2
+            gL = metricas_finales["goles_local"]
+            gV = metricas_finales["goles_visitante"]
+
+            pL, pE, pV = prob_1x2(gL, gV)
+
+            st.markdown("<div class='section-header'>🏆 PROBABILIDAD DE RESULTADO (1X2)</div>", unsafe_allow_html=True)
+            r1, r2, r3 = st.columns(3)
+            r1.metric("Victoria Local", f"{pL*100:.1f}%")
+            r2.metric("Empate", f"{pE*100:.1f}%")
+            r3.metric("Victoria Visitante", f"{pV*100:.1f}%")
+
+            # MERCADOS DE GOLES
+            st.markdown("<div class='section-header'>🔥 MERCADOS DE GOLES PRINCIPALES</div>", unsafe_allow_html=True)
+
+            p_over15 = 1 - (poisson(gL+gV,0) + poisson(gL+gV,1))
+            p_over25 = 1 - (poisson(gL+gV,0) + poisson(gL+gV,1) + poisson(gL+gV,2))
+            p_btts = (1 - poisson(gL,0)) * (1 - poisson(gV,0))
+
+            g1, g2, g3 = st.columns(3)
+            g1.metric("Más de 1.5 Goles", f"{p_over15*100:.1f}%")
+            g2.metric("Más de 2.5 Goles", f"{p_over25*100:.1f}%")
+            g3.metric("Ambos Marcan (SÍ)", f"{p_btts*100:.1f}%")
+
+            # TABLA DETALLADA
+            st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
+
+            tabla = {
+                "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
+                "Local (FVL)": [
+                    f"{metricas_finales['goles_local']:.2f}",
+                    f"{metricas_finales['remates_totales_local']:.2f}",
+                    f"{metricas_finales['remates_puerta_local']:.2f}",
+                    f"{metricas_finales['paradas_local']:.2f}",
+                    f"{metricas_finales['corners_local']:.2f}",
+                    f"{metricas_finales['tarjetas_local']:.2f}",
+                ],
+                "Visitante (FVV)": [
+                    f"{metricas_finales['goles_visitante']:.2f}",
+                    f"{metricas_finales['remates_totales_visitante']:.2f}",
+                    f"{metricas_finales['remates_puerta_visitante']:.2f}",
+                    f"{metricas_finales['paradas_visitante']:.2f}",
+                    f"{metricas_finales['corners_visitante']:.2f}",
+                    f"{metricas_finales['tarjetas_visitante']:.2f}",
+                ],
+                "Total Partido": [
+                    f"{metricas_finales['goles_partido']:.2f}",
+                    f"{metricas_finales['remates_totales_partido']:.2f}",
+                    f"{metricas_finales['remates_puerta_partido']:.2f}",
+                    f"{metricas_finales['paradas_partido']:.2f}",
+                    f"{metricas_finales['corners_partido']:.2f}",
+                    f"{metricas_finales['tarjetas_partido']:.2f}",
+                ]
+            }
+
+            st.table(pd.DataFrame(tabla))
+
+    except Exception as e:
+        st.error(f"Error: {e}")
