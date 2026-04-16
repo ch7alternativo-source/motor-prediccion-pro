@@ -403,7 +403,7 @@ try:
 
         st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
 
-        tabla = {
+  tabla = {
     "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
 
     "Local (FVL)": [
@@ -433,9 +433,8 @@ try:
         f"{metricas_finales['tarjetas_partido']:.2f}"
     ]
 }
+
 st.table(pd.DataFrame(tabla))
-except Exception as e:
-    st.error(f"Error: {e}")
 
 except Exception as e:
     st.error(f"Error: {e}")
