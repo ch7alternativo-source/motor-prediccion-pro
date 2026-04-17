@@ -9,13 +9,16 @@ import joblib
 import os
 import requests
 
+
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
+
 
 # --- 2. CONEXIÓN A GOOGLE SHEETS ---
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
+
 
 def check_user(user_in, pass_in):
     try:
@@ -30,9 +33,11 @@ def check_user(user_in, pass_in):
     except:
         return False
 
+
 # --- 3. SESIÓN ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
+
 
 if not st.session_state['autenticado']:
     st.markdown("<h2 style='text-align: center;'>🔐 Acceso al Sistema</h2>", unsafe_allow_html=True)
@@ -48,8 +53,8 @@ if not st.session_state['autenticado']:
 
     st.stop()   # ← AQUÍ TERMINA EL LOGIN
 
-# --- CARGA DE PESTAÑAS CON CACHÉ ---
-@st.cache_data(ttl=60)
+
+# --- CARGA DE PESTAÑAS ---
 def cargar_pestana_equipo(ws):
     data = ws.get_all_records()
     df = pd.DataFrame(data)
@@ -220,6 +225,7 @@ def prob_1x2(gL, gV):
 # --- MODELOS ML ---
 RUTA_MODELOS = "models"
 
+
 def cargar_modelo(nombre_fichero):
     ruta = os.path.join(RUTA_MODELOS, nombre_fichero)
     if not os.path.exists(ruta):
@@ -311,11 +317,12 @@ def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
 
     return final, True
 
+
 # --- INTERFAZ PRINCIPAL ---
 st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
 
+
 try:
-    # Cargar lista de ligas desde Google Sheets
     sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
     df_ligas = pd.DataFrame(sh_ligas.get_all_records())
 
@@ -324,14 +331,11 @@ try:
     id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
     jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
 
-    # Abrir libro de la liga seleccionada
     libro = client.open_by_key(id_actual)
 
-    # Pestañas válidas (solo equipos)
     excluir = ["config", "partido a analizar", "predicciones"]
     pestanas = [s.title for s in libro.worksheets() if s.title not in excluir]
 
-    # Separar locales y visitantes
     locales = [t for t in pestanas if "LOCAL" in t.upper()]
     visitantes = [t for t in pestanas if "VISITANTE" in t.upper()]
 
@@ -342,12 +346,10 @@ try:
     eq_l = cl.selectbox("🏠 Equipo Local", locales, format_func=clean)
     eq_v = cv.selectbox("🚀 Equipo Visitante", [v for v in visitantes if clean(eq_l) not in v.upper()], format_func=clean)
 
-    # Botón principal
     if st.button("📊 GENERAR ANÁLISIS"):
 
         st.divider()
 
-        # Cargar pestañas del partido
         ws_local = libro.worksheet(eq_l)
         ws_visit = libro.worksheet(eq_v)
 
@@ -362,11 +364,9 @@ try:
             st.error("No se pudo obtener la clasificación desde la API externa.")
             st.stop()
 
-        # Posiciones reales desde API
         pos_local = clasif[clasif["EQUIPO"] == clean(eq_l)]["POS"].values[0]
         pos_visit = clasif[clasif["EQUIPO"] == clean(eq_v)]["POS"].values[0]
 
-        # Grupos según posición
         def grupo(pos):
             if 1 <= pos <= 4: return [1,2,3,4]
             if 5 <= pos <= 10: return [5,6,7,8,9,10]
@@ -376,7 +376,6 @@ try:
         grupo_local = grupo(pos_visit)
         grupo_visit = grupo(pos_local)
 
-        # Preparar bloques métricos
         bloques_local = []
         for b in [1,2,3,4,5]:
             dfL_b = filtrar_bloque(df_local, b, True, grupo_local if b == 5 else None)
@@ -388,14 +387,12 @@ try:
         b1, b2, b3, b4, b5 = bloques_local
         metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
 
-        # ML
         metricas_ml = predecir_ml_metricas(df_local, df_visit)
         metricas_finales, usado_ml = combinar_metrica_y_ml(metricas_metrica, metricas_ml, jor_sel)
 
         if not usado_ml:
             st.info("Rama ML no activa (no hay modelos XGBoost). Usando solo rama métrica.")
 
-        # --- PROBABILIDADES 1X2 ---
         gL = metricas_finales["goles_local"]
         gV = metricas_finales["goles_visitante"]
 
@@ -407,8 +404,6 @@ try:
         r2.metric("Empate", f"{pE*100:.1f}%")
         r3.metric("Victoria Visitante", f"{pV*100:.1f}%")
 
-
-        # --- MERCADOS DE GOLES ---
         st.markdown("<div class='section-header'>🔥 MERCADOS DE GOLES PRINCIPALES</div>", unsafe_allow_html=True)
 
         p_over15 = 1 - (poisson(gL+gV,0) + poisson(gL+gV,1))
@@ -420,8 +415,6 @@ try:
         g2.metric("Más de 2.5 Goles", f"{p_over25*100:.1f}%")
         g3.metric("Ambos Marcan (SÍ)", f"{p_btts*100:.1f}%")
 
-
-        # --- TABLA FINAL DE ESTADÍSTICAS ---
         st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
 
         tabla = {
@@ -454,7 +447,6 @@ try:
 
         st.table(pd.DataFrame(tabla))
 
+
 except Exception as e:
     st.error(f"Error: {e}")
-
-
