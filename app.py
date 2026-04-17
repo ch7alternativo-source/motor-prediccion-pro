@@ -68,40 +68,34 @@ def cargar_pestana_equipo(ws):
 
     return df
 
-def calcular_clasificacion(todas_pestanas):
-    tabla = []
+def obtener_clasificacion_api(codigo_liga="PD"):
+    # REEMPLAZA "TU_API_KEY_AQUI" con la clave de tu cuenta de football-data.org
+    api_key = "TU_API_KEY_AQUI" 
+    url = f"https://api.football-data.org/v4/competitions/{codigo_liga}/standings"
+    headers = {'X-Auth-Token': api_key}
+    
+    try:
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        
+        # Si la API devuelve error de permisos o límite
+        if 'standings' not in data:
+            st.error(f"Error de API: {data.get('message', 'No se pudieron obtener datos')}")
+            return pd.DataFrame()
 
-    for equipo, df in todas_pestanas.items():
-        puntos = 0
-        gf = df["GOL FAVOR"].sum()
-        gc = df["GOL CONTRA"].sum()
-
-        for _, row in df.iterrows():
-            if row["GOL FAVOR"] > row["GOL CONTRA"]:
-                puntos += 3
-            elif row["GOL FAVOR"] == row["GOL CONTRA"]:
-                puntos += 1
-
-        tabla.append([equipo, puntos, gf, gc, gf - gc])
-
-    clasif = pd.DataFrame(tabla, columns=["EQUIPO", "PUNTOS", "GF", "GC", "DG"])
-    clasif = clasif.sort_values(["PUNTOS", "DG", "GF"], ascending=False)
-
-    posiciones = []
-    pos_real = 1
-    prev = None
-
-    for _, row in clasif.iterrows():
-        if prev and row["PUNTOS"] == prev["PUNTOS"]:
-            posiciones.append(pos_real - 1)
-        else:
-            posiciones.append(pos_real)
-        prev = row
-        pos_real += 1
-
-    clasif["POS"] = posiciones
-    return clasif
-
+        tabla_datos = []
+        # Extraemos posición, nombre corto y puntos de cada equipo
+        for team in data['standings'][0]['table']:
+            tabla_datos.append({
+                "EQUIPO": team['team']['shortName'].upper(),
+                "POS": team['position'],
+                "PUNTOS": team['points']
+            })
+        
+        return pd.DataFrame(tabla_datos)
+    except Exception as e:
+        st.error(f"Error de conexión: {e}")
+        return pd.DataFrame(columns=["EQUIPO", "POS", "PUNTOS"])
 
 def filtrar_bloque(df, tipo, es_local, grupo=None):
     if tipo == 1:
