@@ -7,6 +7,7 @@ from math import exp, factorial
 from xgboost import XGBRegressor
 import joblib
 import os
+import requests
 
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
 
@@ -47,7 +48,8 @@ if not st.session_state['autenticado']:
 
     st.stop()   # ← AQUÍ TERMINA EL LOGIN
 
-# MOTOR MÉTRICO (RAMA 1)
+# --- CARGA DE PESTAÑAS CON CACHÉ ---
+@st.cache_data(ttl=60)
 def cargar_pestana_equipo(ws):
     data = ws.get_all_records()
     df = pd.DataFrame(data)
@@ -68,35 +70,36 @@ def cargar_pestana_equipo(ws):
 
     return df
 
+
+# --- CLASIFICACIÓN DESDE API EXTERNA ---
+@st.cache_data(ttl=300)
 def obtener_clasificacion_api(codigo_liga="PD"):
-    # REEMPLAZA "TU_API_KEY_AQUI" con la clave de tu cuenta de football-data.org
-    api_key = "TU_API_KEY_AQUI" 
+    api_key = "TU_API_KEY_AQUI"
     url = f"https://api.football-data.org/v4/competitions/{codigo_liga}/standings"
     headers = {'X-Auth-Token': api_key}
-    
+
     try:
         response = requests.get(url, headers=headers)
         data = response.json()
-        
-        # Si la API devuelve error de permisos o límite
+
         if 'standings' not in data:
-            st.error(f"Error de API: {data.get('message', 'No se pudieron obtener datos')}")
             return pd.DataFrame()
 
         tabla_datos = []
-        # Extraemos posición, nombre corto y puntos de cada equipo
         for team in data['standings'][0]['table']:
             tabla_datos.append({
                 "EQUIPO": team['team']['shortName'].upper(),
                 "POS": team['position'],
                 "PUNTOS": team['points']
             })
-        
-        return pd.DataFrame(tabla_datos)
-    except Exception as e:
-        st.error(f"Error de conexión: {e}")
-        return pd.DataFrame(columns=["EQUIPO", "POS", "PUNTOS"])
 
+        return pd.DataFrame(tabla_datos)
+
+    except:
+        return pd.DataFrame()
+
+
+# --- FILTROS DE BLOQUES ---
 def filtrar_bloque(df, tipo, es_local, grupo=None):
     if tipo == 1:
         return df.copy()
@@ -113,6 +116,7 @@ def filtrar_bloque(df, tipo, es_local, grupo=None):
     return df.copy()
 
 
+# --- LIMPIEZA DE RUIDO ---
 def limpiar_ruido(lista):
     lista = [x for x in lista if pd.notna(x)]
     if len(lista) <= 2:
@@ -121,6 +125,7 @@ def limpiar_ruido(lista):
     return lista[1:-1]
 
 
+# --- CÁLCULO DE MÉTRICAS ---
 def calcular_metricas(dfL, dfV, jornada):
     metricas = {}
 
@@ -165,6 +170,7 @@ def calcular_metricas(dfL, dfV, jornada):
     return metricas
 
 
+# --- PESOS POR JORNADA ---
 def pesos_por_jornada(j):
     if j <= 5: return (0.2, 0.8)
     if j <= 10: return (0.3, 0.7)
@@ -174,6 +180,7 @@ def pesos_por_jornada(j):
     return (0.65, 0.35)
 
 
+# --- COMBINACIÓN DE BLOQUES ---
 def combinar_bloques(b1, b2, b3, b4, b5):
     final = {}
     for k in b1.keys():
@@ -186,10 +193,13 @@ def combinar_bloques(b1, b2, b3, b4, b5):
         )
     return final
 
+
+# --- POISSON ---
 def poisson(lam, k):
     return (lam**k * exp(-lam)) / factorial(k)
 
 
+# --- PROBABILIDAD 1X2 ---
 def prob_1x2(gL, gV):
     max_g = 10
     pL = pE = pV = 0
@@ -207,8 +217,8 @@ def prob_1x2(gL, gV):
     return pL, pE, pV
 
 
+# --- MODELOS ML ---
 RUTA_MODELOS = "models"
-
 
 def cargar_modelo(nombre_fichero):
     ruta = os.path.join(RUTA_MODELOS, nombre_fichero)
@@ -301,9 +311,11 @@ def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
 
     return final, True
 
+# --- INTERFAZ PRINCIPAL ---
 st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
 
 try:
+    # Cargar lista de ligas desde Google Sheets
     sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
     df_ligas = pd.DataFrame(sh_ligas.get_all_records())
 
@@ -312,45 +324,49 @@ try:
     id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
     jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
 
+    # Abrir libro de la liga seleccionada
     libro = client.open_by_key(id_actual)
-    excluir = ["config", "partido a analizar", "predicciones", "LIGAS", "Sheet1", "Hoja1"]
+
+    # Pestañas válidas (solo equipos)
+    excluir = ["config", "partido a analizar", "predicciones"]
     pestanas = [s.title for s in libro.worksheets() if s.title not in excluir]
 
+    # Separar locales y visitantes
     locales = [t for t in pestanas if "LOCAL" in t.upper()]
     visitantes = [t for t in pestanas if "VISITANTE" in t.upper()]
 
     def clean(n):
-        return n.replace(" LOCAL","").replace(" VISITANTE","").strip()
+        return n.replace(" LOCAL", "").replace(" VISITANTE", "").strip()
 
     cl, cv = st.columns(2)
     eq_l = cl.selectbox("🏠 Equipo Local", locales, format_func=clean)
     eq_v = cv.selectbox("🚀 Equipo Visitante", [v for v in visitantes if clean(eq_l) not in v.upper()], format_func=clean)
 
+    # Botón principal
     if st.button("📊 GENERAR ANÁLISIS"):
 
         st.divider()
 
+        # Cargar pestañas del partido
         ws_local = libro.worksheet(eq_l)
         ws_visit = libro.worksheet(eq_v)
 
         df_local = cargar_pestana_equipo(ws_local)
         df_visit = cargar_pestana_equipo(ws_visit)
 
-        todas = {}
-        for p in pestanas:
-            ws = libro.worksheet(p)
-            dfp = cargar_pestana_equipo(ws)
-            if dfp.empty:       # ← nueva
-                continue        # ← nueva
-            equipo = p.replace(" LOCAL", "").replace(" VISITANTE", "")
-            if equipo not in todas:
-                todas[equipo] = dfp
+        # --- CLASIFICACIÓN DESDE API EXTERNA ---
+        codigo_api = "PD"   # LaLiga
+        clasif = obtener_clasificacion_api(codigo_api)
 
-        clasif = calcular_clasificacion(todas)
+        if clasif.empty:
+            st.error("No se pudo obtener la clasificación desde la API externa.")
+            st.stop()
 
+        # Posiciones reales desde API
         pos_local = clasif[clasif["EQUIPO"] == clean(eq_l)]["POS"].values[0]
         pos_visit = clasif[clasif["EQUIPO"] == clean(eq_v)]["POS"].values[0]
 
+        # Grupos según posición
         def grupo(pos):
             if 1 <= pos <= 4: return [1,2,3,4]
             if 5 <= pos <= 10: return [5,6,7,8,9,10]
@@ -360,8 +376,8 @@ try:
         grupo_local = grupo(pos_visit)
         grupo_visit = grupo(pos_local)
 
+        # Preparar bloques métricos
         bloques_local = []
-
         for b in [1,2,3,4,5]:
             dfL_b = filtrar_bloque(df_local, b, True, grupo_local if b == 5 else None)
             dfV_b = filtrar_bloque(df_visit, b, False, grupo_visit if b == 5 else None)
@@ -372,13 +388,14 @@ try:
         b1, b2, b3, b4, b5 = bloques_local
         metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
 
+        # ML
         metricas_ml = predecir_ml_metricas(df_local, df_visit)
-
         metricas_finales, usado_ml = combinar_metrica_y_ml(metricas_metrica, metricas_ml, jor_sel)
 
         if not usado_ml:
             st.info("Rama ML no activa (no hay modelos XGBoost). Usando solo rama métrica.")
 
+        # --- PROBABILIDADES 1X2 ---
         gL = metricas_finales["goles_local"]
         gV = metricas_finales["goles_visitante"]
 
@@ -390,6 +407,8 @@ try:
         r2.metric("Empate", f"{pE*100:.1f}%")
         r3.metric("Victoria Visitante", f"{pV*100:.1f}%")
 
+
+        # --- MERCADOS DE GOLES ---
         st.markdown("<div class='section-header'>🔥 MERCADOS DE GOLES PRINCIPALES</div>", unsafe_allow_html=True)
 
         p_over15 = 1 - (poisson(gL+gV,0) + poisson(gL+gV,1))
@@ -401,8 +420,10 @@ try:
         g2.metric("Más de 2.5 Goles", f"{p_over25*100:.1f}%")
         g3.metric("Ambos Marcan (SÍ)", f"{p_btts*100:.1f}%")
 
+
+        # --- TABLA FINAL DE ESTADÍSTICAS ---
         st.markdown("<div class='section-header'>📈 PREDICCIÓN DE ESTADÍSTICAS DETALLADAS</div>", unsafe_allow_html=True)
-                    
+
         tabla = {
             "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
             "Local (FVL)": [
@@ -435,3 +456,5 @@ try:
 
 except Exception as e:
     st.error(f"Error: {e}")
+
+
