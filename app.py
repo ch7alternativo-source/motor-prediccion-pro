@@ -49,6 +49,103 @@ if not st.session_state['autenticado']:
 
 
 # =========================================================
+# MAPEO DE NOMBRES DE EQUIPOS (APP -> API)
+# =========================================================
+def normalizar_nombre_equipo(nombre):
+    """
+    Convierte nombres de equipos de la app a nombres de la API de football-data.org
+    """
+    mapeo_equipos = {
+        # LaLiga
+        "ALAVES": "DEPORTIVO ALAVES",
+        "ATH BILBAO": "ATHLETIC BILBAO",
+        "ATHLETIC BILBAO": "ATHLETIC BILBAO",
+        "ATLETICO MADRID": "ATLETICO MADRID",
+        "BARCELONA": "FC BARCELONA",
+        "FC BARCELONA": "FC BARCELONA",
+        "BETIS": "REAL BETIS",
+        "CELTA": "RC CELTA",
+        "DEPORTIVO ALAVES": "DEPORTIVO ALAVES",
+        "ESPANYOL": "RCD ESPANYOL",
+        "GETAFE": "GETAFE CF",
+        "GIRONA": "GIRONA FC",
+        "GRANADA": "GRANADA CF",
+        "LAS PALMAS": "UD LAS PALMAS",
+        "LEGANES": "CD LEGANES",
+        "LEVANTE": "LEVANTE UD",
+        "MALLORCA": "RCD MALLORCA",
+        "OSASUNA": "CA OSASUNA",
+        "RAYO VALLECANO": "RAYO VALLECANO",
+        "REAL MADRID": "REAL MADRID CF",
+        "REAL SOCIEDAD": "REAL SOCIEDAD",
+        "SEVILLA": "SEVILLA FC",
+        "VALENCIA": "VALENCIA CF",
+        "VILLARREAL": "VILLARREAL CF",
+        "ELCHE": "ELCHE CF",
+        "OVIEDO": "REAL OVIEDO",
+        "HUESCA": "SD HUESCA",
+        "CADIZ": "CADIZ CF",
+        
+        # Premier League
+        "ARSENAL": "ARSENAL FC",
+        "ASTON VILLA": "ASTON VILLA FC",
+        "BOURNEMOUTH": "AFC BOURNEMOUTH",
+        "BRENTFORD": "BRENTFORD FC",
+        "BRIGHTON": "BRIGHTON & HOVE ALBION",
+        "CHELSEA": "CHELSEA FC",
+        "CRYSTAL PALACE": "CRYSTAL PALACE FC",
+        "EVERTON": "EVERTON FC",
+        "FULHAM": "FULHAM FC",
+        "IPSWICH": "IPSWICH TOWN",
+        "LEICESTER": "LEICESTER CITY",
+        "LIVERPOOL": "LIVERPOOL FC",
+        "MANCHESTER CITY": "MANCHESTER CITY FC",
+        "MANCHESTER UNITED": "MANCHESTER UNITED FC",
+        "NEWCASTLE": "NEWCASTLE UNITED FC",
+        "NOTTINGHAM": "NOTTINGHAM FOREST",
+        "SOUTHAMPTON": "SOUTHAMPTON FC",
+        "TOTTENHAM": "TOTTENHAM HOTSPUR FC",
+        "WEST HAM": "WEST HAM UNITED FC",
+        "WOLVES": "WOLVERHAMPTON WANDERERS",
+        
+        # Serie A
+        "JUVENTUS": "JUVENTUS FC",
+        "INTER": "FC INTERNAZIONALE MILANO",
+        "MILAN": "AC MILAN",
+        "ROMA": "AS ROMA",
+        "NAPOLI": "SSC NAPOLI",
+        "LAZIO": "SS LAZIO",
+        "FIORENTINA": "ACF FIORENTINA",
+        "ATALANTA": "ATALANTA BC",
+        "TORINO": "TORINO FC",
+        
+        # Bundesliga
+        "BAYERN MUNICH": "FC BAYERN MUNICH",
+        "BAYERN": "FC BAYERN MUNICH",
+        "DORTMUND": "BORUSSIA DORTMUND",
+        "BORUSSIA DORTMUND": "BORUSSIA DORTMUND",
+        "LEIPZIG": "RB LEIPZIG",
+        "LEVERKUSEN": "BAYER 04 LEVERKUSEN",
+        
+        # Ligue 1
+        "PSG": "PARIS SAINT-GERMAIN",
+        "PARIS SAINT-GERMAIN": "PARIS SAINT-GERMAIN",
+        "MARSEILLE": "OLYMPIQUE MARSEILLE",
+        "LYON": "OLYMPIQUE LYONNAIS",
+        "MONACO": "AS MONACO FC",
+    }
+    
+    nombre_upper = nombre.upper().strip()
+    
+    # Buscar coincidencia exacta en el mapeo
+    if nombre_upper in mapeo_equipos:
+        return mapeo_equipos[nombre_upper]
+    
+    # Si no está en el mapeo, devolver el nombre original
+    return nombre_upper
+
+
+# =========================================================
 # DETECCIÓN INTELIGENTE DE COLUMNAS (basada en palabras clave)
 # =========================================================
 def detectar_columna(df, palabras_clave):
@@ -369,6 +466,56 @@ def prob_1x2(gL, gV):
 
 
 # =========================================================
+# FUNCIÓN PARA ENCONTRAR EQUIPO EN CLASIFICACIÓN (CON MAPEO)
+# =========================================================
+def encontrar_equipo_en_clasificacion(nombre, df_clasif):
+    """
+    Busca un equipo en la clasificación usando el mapeo de nombres.
+    """
+    nombre_original = nombre.upper().strip()
+    
+    # Paso 1: Normalizar el nombre usando el mapeo
+    nombre_normalizado = normalizar_nombre_equipo(nombre_original)
+    
+    # Paso 2: Búsqueda exacta con nombre normalizado
+    mask = df_clasif["EQUIPO"] == nombre_normalizado
+    if mask.any():
+        return df_clasif[mask].iloc[0]
+    
+    # Paso 3: Búsqueda exacta con nombre original
+    mask = df_clasif["EQUIPO"] == nombre_original
+    if mask.any():
+        return df_clasif[mask].iloc[0]
+    
+    # Paso 4: Búsqueda por coincidencia parcial (flexible)
+    for idx, row in df_clasif.iterrows():
+        equipo_api = row["EQUIPO"].upper().strip()
+        
+        # Si el nombre original está contenido en el nombre de la API
+        if nombre_original in equipo_api:
+            return row
+        
+        # Si el nombre de la API está contenido en el nombre original
+        if equipo_api in nombre_original:
+            return row
+        
+        # Comparar palabras clave (ignorando "FC", "CF", "UD", etc.)
+        palabras_nombre = set(nombre_original.split())
+        palabras_api = set(equipo_api.split())
+        
+        # Quitar sufijos comunes
+        sufijos = {"FC", "CF", "UD", "CD", "CA", "RC", "SAD", "CLUB", "DEPORTIVO"}
+        palabras_nombre = palabras_nombre - sufijos
+        palabras_api = palabras_api - sufijos
+        
+        if palabras_nombre and palabras_api:
+            if len(palabras_nombre.intersection(palabras_api)) >= 1:
+                return row
+    
+    return None
+
+
+# =========================================================
 # INTERFAZ PRINCIPAL
 # =========================================================
 st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>", unsafe_allow_html=True)
@@ -434,26 +581,25 @@ try:
                 st.error("❌ No se pudo obtener la clasificación desde la API externa.")
                 st.stop()
             
+            # Mostrar equipos disponibles en la API (para depuración)
+            with st.expander("🔍 Equipos disponibles en la API (primeros 20)"):
+                st.write(clasif["EQUIPO"].head(20).tolist())
+            
             nombre_local_clean = clean(eq_l).upper()
             nombre_visit_clean = clean(eq_v).upper()
             
-            def encontrar_equipo(nombre, df_clasif):
-                nombre_upper = nombre.upper()
-                for idx, row in df_clasif.iterrows():
-                    equipo = row["EQUIPO"].upper()
-                    if nombre_upper == equipo or nombre_upper in equipo or equipo in nombre_upper:
-                        return row
-                return None
-            
-            local_info = encontrar_equipo(nombre_local_clean, clasif)
-            visit_info = encontrar_equipo(nombre_visit_clean, clasif)
+            # Buscar equipos usando la nueva función con mapeo
+            local_info = encontrar_equipo_en_clasificacion(nombre_local_clean, clasif)
+            visit_info = encontrar_equipo_en_clasificacion(nombre_visit_clean, clasif)
             
             if local_info is None:
                 st.error(f"❌ No se encontró '{nombre_local_clean}' en la clasificación")
+                st.info(f"Nombre normalizado: {normalizar_nombre_equipo(nombre_local_clean)}")
                 st.stop()
             
             if visit_info is None:
                 st.error(f"❌ No se encontró '{nombre_visit_clean}' en la clasificación")
+                st.info(f"Nombre normalizado: {normalizar_nombre_equipo(nombre_visit_clean)}")
                 st.stop()
             
             pos_local = local_info["POS"]
@@ -467,8 +613,8 @@ try:
                 if 11 <= pos <= 16: return [11,12,13,14,15,16]
                 return list(range(17, 26))
             
-            grupo_local_rival = grupo(pos_visit)  # Grupo del rival para filtrar LOCAL
-            grupo_visit_rival = grupo(pos_local)  # Grupo del rival para filtrar VISITANTE
+            grupo_local_rival = grupo(pos_visit)
+            grupo_visit_rival = grupo(pos_local)
             
             # Calcular métricas por bloque
             bloques = []
