@@ -9,16 +9,13 @@ import joblib
 import os
 import requests
 
-
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
-
 
 # --- CONEXIÓN A GOOGLE SHEETS ---
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
-
 
 def check_user(user_in, pass_in):
     try:
@@ -32,7 +29,6 @@ def check_user(user_in, pass_in):
         return False
     except:
         return False
-
 
 # --- SESIÓN ---
 if 'autenticado' not in st.session_state:
@@ -50,7 +46,6 @@ if not st.session_state['autenticado']:
             else:
                 st.error("Datos incorrectos")
     st.stop()
-
 
 # --- CARGA DE PESTAÑAS ---
 def cargar_pestana_equipo(ws):
@@ -73,29 +68,76 @@ def cargar_pestana_equipo(ws):
 
     return df
 
-
-# --- CLASIFICACIÓN DESDE API EXTERNA ---
+# --- CLASIFICACIÓN DESDE API EXTERNA (football-data.org) ---
 @st.cache_data(ttl=300)
 def obtener_clasificacion_api(codigo_liga="PD"):
-    api_key = "TU_API_KEY_AQUI"
+    api_key = "816135609d2e40f2867713634c0aefab"  # Tu API key
     url = f"https://api.football-data.org/v4/competitions/{codigo_liga}/standings"
     headers = {'X-Auth-Token': api_key}
     try:
         response = requests.get(url, headers=headers)
-        data = response.json()
-        if 'standings' not in data:
+        
+        # Verificar si la respuesta es exitosa
+        if response.status_code != 200:
+            st.warning(f"API Error: {response.status_code} - {response.text}")
             return pd.DataFrame()
+            
+        data = response.json()
+        
+        if 'standings' not in data or len(data['standings']) == 0:
+            st.warning("No se encontraron datos de clasificación en la respuesta de la API")
+            return pd.DataFrame()
+            
         tabla_datos = []
-        for team in data['standings'][0]['table']:
+        
+        # La API puede devolver múltiples standings (por ejemplo, TOTAL, HOME, AWAY)
+        # Usamos el primero que normalmente es el TOTAL
+        standings = data['standings'][0]['table']
+        
+        for team in standings:
+            # Algunos equipos pueden no tener shortName, usamos name como fallback
+            nombre_equipo = team['team'].get('shortName', team['team'].get('name', ''))
             tabla_datos.append({
-                "EQUIPO": team['team']['shortName'].upper(),
+                "EQUIPO": nombre_equipo.upper(),
                 "POS": team['position'],
                 "PUNTOS": team['points']
             })
+        
+        if len(tabla_datos) == 0:
+            st.warning("No se encontraron equipos en la clasificación")
+            return pd.DataFrame()
+            
         return pd.DataFrame(tabla_datos)
-    except:
+        
+    except requests.exceptions.RequestException as e:
+        st.warning(f"Error de conexión con la API: {e}")
+        return pd.DataFrame()
+    except Exception as e:
+        st.warning(f"Error procesando datos de la API: {e}")
         return pd.DataFrame()
 
+# --- MAPEO DE LIGAS A CÓDIGOS DE API ---
+def obtener_codigo_api(nombre_liga):
+    mapeo_ligas = {
+        "LALIGA 25/26": "PD",  # Primera División
+        "LALIGA": "PD",
+        "LA LIGA": "PD",
+        "PREMIER LEAGUE": "PL",
+        "PREMIER": "PL",
+        "EPL": "PL",
+        "SERIE A": "SA",
+        "SERIE A ITALIA": "SA",
+        "BUNDESLIGA": "BL1",
+        "BUNDESLIGA ALEMANA": "BL1",
+        "LIGUE 1": "FL1",
+        "LIGUE 1 FRANCESA": "FL1",
+        "EREDIVISIE": "DED",
+        "PRIMEIRA LIGA": "PPL",
+        "CHAMPIONSHIP": "ELC",
+        "WORLD CUP": "WC",
+        "EURO": "EC"
+    }
+    return mapeo_ligas.get(nombre_liga.upper(), "PD")  # Por defecto LaLiga
 
 # --- FILTROS DE BLOQUES ---
 def filtrar_bloque(df, tipo, es_local, grupo=None):
@@ -113,7 +155,6 @@ def filtrar_bloque(df, tipo, es_local, grupo=None):
         return df[df["POSICION RIVAL"].isin(grupo)].copy()
     return df.copy()
 
-
 # --- LIMPIEZA DE RUIDO ---
 def limpiar_ruido(lista):
     lista = [x for x in lista if pd.notna(x)]
@@ -121,7 +162,6 @@ def limpiar_ruido(lista):
         return lista
     lista = sorted(lista)
     return lista[1:-1]
-
 
 # --- CÁLCULO DE MÉTRICAS ---
 def calcular_metricas(dfL, dfV, jornada):
@@ -157,7 +197,6 @@ def calcular_metricas(dfL, dfV, jornada):
         metricas[nombre + "_partido"] = m_local + m_visit
     return metricas
 
-
 # --- PESOS POR JORNADA ---
 def pesos_por_jornada(j):
     if j <= 5: return (0.2, 0.8)
@@ -166,7 +205,6 @@ def pesos_por_jornada(j):
     if j <= 20: return (0.5, 0.5)
     if j <= 30: return (0.6, 0.4)
     return (0.65, 0.35)
-
 
 # --- COMBINACIÓN DE BLOQUES ---
 def combinar_bloques(b1, b2, b3, b4, b5):
@@ -181,11 +219,9 @@ def combinar_bloques(b1, b2, b3, b4, b5):
         )
     return final
 
-
 # --- POISSON ---
 def poisson(lam, k):
     return (lam**k * exp(-lam)) / factorial(k)
-
 
 # --- PROBABILIDAD 1X2 ---
 def prob_1x2(gL, gV):
@@ -201,7 +237,6 @@ def prob_1x2(gL, gV):
             else:
                 pV += p
     return pL, pE, pV
-
 
 # --- MODELOS ML ---
 RUTA_MODELOS = "models"
@@ -278,7 +313,6 @@ def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
             final[k] = alpha_m * v + alpha_ml * ml_val
     return final, True
 
-
 # --- INTERFAZ PRINCIPAL ---
 st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
 
@@ -297,7 +331,7 @@ try:
     if cache_key not in st.session_state:
         libro_temp = client.open_by_key(id_actual)
         excluir = ["config", "partido a analizar", "predicciones"]
-        st.session_state[cache_key] = [s.title for s in libro_temp.worksheets() if s.title not in excluir]
+        st.session_state[cache_key] = [s.title for s in libro_temp.worksheets() if s.title.lower() not in [e.lower() for e in excluir]]
 
     pestanas = st.session_state[cache_key]
 
@@ -324,16 +358,50 @@ try:
         df_local = cargar_pestana_equipo(ws_local)
         df_visit = cargar_pestana_equipo(ws_visit)
 
-        # Clasificación desde API externa
-        codigo_api = "PD"
-        clasif = obtener_clasificacion_api(codigo_api)
+        # Obtener clasificación desde API externa
+        codigo_api = obtener_codigo_api(liga_sel)
+        
+        with st.spinner(f"Obteniendo clasificación de {liga_sel} desde football-data.org..."):
+            clasif = obtener_clasificacion_api(codigo_api)
 
         if clasif.empty:
-            st.error("No se pudo obtener la clasificación desde la API externa.")
+            st.error("❌ No se pudo obtener la clasificación desde la API externa. Verifica tu conexión o la API key.")
             st.stop()
 
-        pos_local = clasif[clasif["EQUIPO"] == clean(eq_l)]["POS"].values[0]
-        pos_visit = clasif[clasif["EQUIPO"] == clean(eq_v)]["POS"].values[0]
+        # Buscar posiciones de los equipos (coincidencia flexible)
+        nombre_local_clean = clean(eq_l).upper()
+        nombre_visit_clean = clean(eq_v).upper()
+        
+        # Función para encontrar equipo en la clasificación
+        def encontrar_equipo(nombre, df_clasif):
+            # Primero búsqueda exacta
+            mask = df_clasif["EQUIPO"] == nombre
+            if mask.any():
+                return df_clasif[mask].iloc[0]
+            
+            # Búsqueda parcial (ej: "REAL MADRID" vs "R. MADRID" o "MADRID")
+            for idx, row in df_clasif.iterrows():
+                if nombre in row["EQUIPO"] or row["EQUIPO"] in nombre:
+                    return row
+            return None
+        
+        local_info = encontrar_equipo(nombre_local_clean, clasif)
+        visit_info = encontrar_equipo(nombre_visit_clean, clasif)
+        
+        if local_info is None:
+            st.error(f"❌ No se encontró '{nombre_local_clean}' en la clasificación de {liga_sel}")
+            st.info(f"Equipos disponibles: {', '.join(clasif['EQUIPO'].tolist())}")
+            st.stop()
+            
+        if visit_info is None:
+            st.error(f"❌ No se encontró '{nombre_visit_clean}' en la clasificación de {liga_sel}")
+            st.info(f"Equipos disponibles: {', '.join(clasif['EQUIPO'].tolist())}")
+            st.stop()
+        
+        pos_local = local_info["POS"]
+        pos_visit = visit_info["POS"]
+        
+        st.success(f"✅ Clasificación obtenida: {nombre_local_clean} (Pos {pos_local}) | {nombre_visit_clean} (Pos {pos_visit})")
 
         def grupo(pos):
             if 1 <= pos <= 4: return [1,2,3,4]
@@ -358,7 +426,7 @@ try:
         metricas_finales, usado_ml = combinar_metrica_y_ml(metricas_metrica, metricas_ml, jor_sel)
 
         if not usado_ml:
-            st.info("Rama ML no activa (no hay modelos XGBoost). Usando solo rama métrica.")
+            st.info("ℹ️ Rama ML no activa (no hay modelos XGBoost). Usando solo rama métrica.")
 
         gL = metricas_finales["goles_local"]
         gV = metricas_finales["goles_visitante"]
