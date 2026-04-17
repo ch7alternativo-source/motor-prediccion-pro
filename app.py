@@ -137,24 +137,17 @@ def normalizar_nombre_equipo(nombre):
     
     nombre_upper = nombre.upper().strip()
     
-    # Buscar coincidencia exacta en el mapeo
     if nombre_upper in mapeo_equipos:
         return mapeo_equipos[nombre_upper]
     
-    # Si no está en el mapeo, devolver el nombre original
     return nombre_upper
 
 
 # =========================================================
-# DETECCIÓN INTELIGENTE DE COLUMNAS (basada en palabras clave)
+# DETECCIÓN INTELIGENTE DE COLUMNAS
 # =========================================================
 def detectar_columna(df, palabras_clave):
-    """
-    Detecta una columna basándose en palabras clave.
-    Retorna el nombre de la columna encontrada o None.
-    """
     df_cols = df.columns.tolist()
-    
     for col in df_cols:
         col_lower = col.lower()
         for palabra in palabras_clave:
@@ -164,12 +157,8 @@ def detectar_columna(df, palabras_clave):
 
 
 def mapear_columnas(df):
-    """
-    Mapea las columnas reales del DataFrame a los nombres estándar que usa el código.
-    """
     mapeo = {}
     
-    # Definición de patrones para cada métrica
     columnas_buscar = {
         "GOL FAVOR": ["gol favor", "goles favor", "gf", "goles_marcados"],
         "GOL CONTRA": ["gol contra", "goles contra", "gc", "goles_recibidos"],
@@ -181,8 +170,8 @@ def mapear_columnas(df):
         "PARADAS CONTRA": ["paradas contra", "paradas c", "saves against"],
         "CORNERES FAVOR": ["corneres favor", "corners favor", "córners favor", "corner favor"],
         "CORNERES CONTRA": ["corneres contra", "corners contra", "córners contra", "corner contra"],
-        "TARJETAS AMARILLAS FAVOR": ["tarjetas amarillas favor", "amarillas favor", "yellow cards for", "tarjetas amarillas favor", "tarjetas amarillas favor("],
-        "TARJETAS AMARILLAS CONTRA": ["tarjetas amarillas contra", "amarillas contra", "yellow cards against", "tarjetas amarillas contra"],
+        "TARJETAS AMARILLAS FAVOR": ["tarjetas amarillas favor", "amarillas favor", "yellow cards for", "tarjetas amarillas favor("],
+        "TARJETAS AMARILLAS CONTRA": ["tarjetas amarillas contra", "amarillas contra", "yellow cards against"],
         "JORNADA": ["jornada", "jor", "round", "matchday"],
         "RIVAL": ["rival", "oponente", "equipo rival", "opponent"],
         "POSICION RIVAL": ["posicion rival", "posición rival", "pos rival"],
@@ -198,22 +187,15 @@ def mapear_columnas(df):
 
 
 def normalizar_y_validar(df):
-    """
-    Normaliza nombres de columnas y convierte datos a tipos correctos.
-    """
     if df.empty:
         return df
     
-    # Mapear columnas
     mapeo = mapear_columnas(df)
-    
     if mapeo:
         df = df.rename(columns=mapeo)
     
-    # Limpiar nombres de columnas (quitar espacios, estandarizar)
     df.columns = [str(col).strip().upper() for col in df.columns]
     
-    # Convertir columnas numéricas
     columnas_numericas = [
         "GOL FAVOR", "GOL CONTRA", "REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA",
         "REMATES PUERTA FAVOR", "REMATES PUERTA CONTRA", "PARADAS FAVOR", "PARADAS CONTRA",
@@ -223,29 +205,24 @@ def normalizar_y_validar(df):
     
     for col in columnas_numericas:
         if col in df.columns:
-            # Reemplazar comas por puntos para números decimales
             df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Procesar FECHA
     if "FECHA" in df.columns:
         df["FECHA"] = pd.to_datetime(df["FECHA"], errors='coerce', dayfirst=True)
         df = df.dropna(subset=["FECHA"])
         df = df.sort_values("FECHA")
     
-    # Procesar JORNADA
     if "JORNADA" in df.columns:
         df = df.dropna(subset=["JORNADA"])
         df["JORNADA"] = df["JORNADA"].astype(int)
     
-    # Procesar RIVAL
     if "RIVAL" in df.columns:
         df["RIVAL"] = df["RIVAL"].astype(str).str.upper().str.strip()
     
     return df
 
 
-# --- CARGA DE PESTAÑAS ---
 def cargar_pestana_equipo(ws):
     try:
         data = ws.get_all_records()
@@ -253,20 +230,16 @@ def cargar_pestana_equipo(ws):
             return pd.DataFrame()
         
         df = pd.DataFrame(data)
-        
         if df.empty or len(df.columns) == 0:
             return pd.DataFrame()
         
         df = normalizar_y_validar(df)
-        
         return df
-        
     except Exception as e:
         st.warning(f"Error cargando pestaña: {e}")
         return pd.DataFrame()
 
 
-# --- CLASIFICACIÓN DESDE API EXTERNA ---
 @st.cache_data(ttl=300)
 def obtener_clasificacion_api(codigo_liga="PD"):
     api_key = "816135609d2e40f2867713634c0aefab"
@@ -274,19 +247,16 @@ def obtener_clasificacion_api(codigo_liga="PD"):
     headers = {'X-Auth-Token': api_key}
     try:
         response = requests.get(url, headers=headers)
-        
         if response.status_code != 200:
             st.warning(f"API Error: {response.status_code}")
             return pd.DataFrame()
-            
-        data = response.json()
         
+        data = response.json()
         if 'standings' not in data or len(data['standings']) == 0:
             return pd.DataFrame()
-            
+        
         tabla_datos = []
         standings = data['standings'][0]['table']
-        
         for team in standings:
             nombre_equipo = team['team'].get('shortName', team['team'].get('name', ''))
             tabla_datos.append({
@@ -294,15 +264,12 @@ def obtener_clasificacion_api(codigo_liga="PD"):
                 "POS": team['position'],
                 "PUNTOS": team['points']
             })
-        
         return pd.DataFrame(tabla_datos)
-        
     except Exception as e:
         st.warning(f"Error API: {e}")
         return pd.DataFrame()
 
 
-# --- MAPEO DE LIGAS ---
 def obtener_codigo_api(nombre_liga):
     mapeo_ligas = {
         "LALIGA 25/26": "PD", "LALIGA": "PD", "LA LIGA": "PD",
@@ -314,7 +281,6 @@ def obtener_codigo_api(nombre_liga):
     return mapeo_ligas.get(nombre_liga.upper(), "PD")
 
 
-# --- FILTROS DE BLOQUES ---
 def filtrar_bloque(df, tipo, grupo=None):
     if df.empty:
         return df
@@ -332,7 +298,6 @@ def filtrar_bloque(df, tipo, grupo=None):
     return df.copy()
 
 
-# --- LIMPIEZA DE RUIDO ---
 def limpiar_ruido(lista):
     lista = [x for x in lista if pd.notna(x)]
     if len(lista) <= 2:
@@ -341,11 +306,9 @@ def limpiar_ruido(lista):
     return lista[1:-1]
 
 
-# --- CÁLCULO DE MÉTRICAS ---
 def calcular_metricas(dfL, dfV, jornada):
     metricas = {}
     
-    # Definición de columnas requeridas
     columnas_def = [
         ("GOL FAVOR", "GOL CONTRA", "goles"),
         ("REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA", "remates_totales"),
@@ -356,7 +319,6 @@ def calcular_metricas(dfL, dfV, jornada):
     ]
     
     for colF, colC, nombre in columnas_def:
-        # Verificar existencia de columnas
         tieneF_L = colF in dfL.columns
         tieneC_L = colC in dfL.columns
         tieneF_V = colF in dfV.columns
@@ -369,7 +331,6 @@ def calcular_metricas(dfL, dfV, jornada):
             continue
         
         try:
-            # Extraer listas limpias
             lista_L_fav = dfL[colF].dropna().tolist()
             lista_V_contra = dfV[colC].dropna().tolist()
             
@@ -397,7 +358,6 @@ def calcular_metricas(dfL, dfV, jornada):
             metricas[nombre + "_local"] = m_local
             metricas[nombre + "_visitante"] = m_visit
             metricas[nombre + "_partido"] = m_local + m_visit
-            
         except Exception as e:
             metricas[nombre + "_local"] = 0
             metricas[nombre + "_visitante"] = 0
@@ -406,7 +366,6 @@ def calcular_metricas(dfL, dfV, jornada):
     return metricas
 
 
-# --- PESOS POR JORNADA ---
 def pesos_por_jornada(j):
     if j <= 5: return (0.2, 0.8)
     if j <= 10: return (0.3, 0.7)
@@ -416,7 +375,6 @@ def pesos_por_jornada(j):
     return (0.65, 0.35)
 
 
-# --- COMBINACIÓN DE BLOQUES ---
 def combinar_bloques(b1, b2, b3, b4, b5):
     final = {}
     for k in b1.keys():
@@ -430,7 +388,6 @@ def combinar_bloques(b1, b2, b3, b4, b5):
     return final
 
 
-# --- POISSON ---
 def poisson(lam, k):
     if lam <= 0:
         return 1 if k == 0 else 0
@@ -440,7 +397,6 @@ def poisson(lam, k):
         return 0
 
 
-# --- PROBABILIDAD 1X2 ---
 def prob_1x2(gL, gV):
     max_g = 8
     pL = pE = pV = 0.0
@@ -456,7 +412,6 @@ def prob_1x2(gL, gV):
                     pV += p
             except:
                 continue
-    # Normalizar por si acaso
     total = pL + pE + pV
     if total > 0:
         pL /= total
@@ -465,52 +420,22 @@ def prob_1x2(gL, gV):
     return pL, pE, pV
 
 
-# =========================================================
-# FUNCIÓN PARA ENCONTRAR EQUIPO EN CLASIFICACIÓN (CON MAPEO)
-# =========================================================
 def encontrar_equipo_en_clasificacion(nombre, df_clasif):
-    """
-    Busca un equipo en la clasificación usando el mapeo de nombres.
-    """
     nombre_original = nombre.upper().strip()
-    
-    # Paso 1: Normalizar el nombre usando el mapeo
     nombre_normalizado = normalizar_nombre_equipo(nombre_original)
     
-    # Paso 2: Búsqueda exacta con nombre normalizado
     mask = df_clasif["EQUIPO"] == nombre_normalizado
     if mask.any():
         return df_clasif[mask].iloc[0]
     
-    # Paso 3: Búsqueda exacta con nombre original
     mask = df_clasif["EQUIPO"] == nombre_original
     if mask.any():
         return df_clasif[mask].iloc[0]
     
-    # Paso 4: Búsqueda por coincidencia parcial (flexible)
     for idx, row in df_clasif.iterrows():
         equipo_api = row["EQUIPO"].upper().strip()
-        
-        # Si el nombre original está contenido en el nombre de la API
-        if nombre_original in equipo_api:
+        if nombre_original in equipo_api or equipo_api in nombre_original:
             return row
-        
-        # Si el nombre de la API está contenido en el nombre original
-        if equipo_api in nombre_original:
-            return row
-        
-        # Comparar palabras clave (ignorando "FC", "CF", "UD", etc.)
-        palabras_nombre = set(nombre_original.split())
-        palabras_api = set(equipo_api.split())
-        
-        # Quitar sufijos comunes
-        sufijos = {"FC", "CF", "UD", "CD", "CA", "RC", "SAD", "CLUB", "DEPORTIVO"}
-        palabras_nombre = palabras_nombre - sufijos
-        palabras_api = palabras_api - sufijos
-        
-        if palabras_nombre and palabras_api:
-            if len(palabras_nombre.intersection(palabras_api)) >= 1:
-                return row
     
     return None
 
@@ -560,7 +485,6 @@ try:
             df_local = cargar_pestana_equipo(ws_local)
             df_visit = cargar_pestana_equipo(ws_visit)
             
-            # Mostrar diagnóstico
             with st.expander("🔧 Diagnóstico - Columnas encontradas"):
                 st.write("**Columnas LOCAL:**", list(df_local.columns) if not df_local.empty else "DataFrame vacío")
                 st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "DataFrame vacío")
@@ -568,10 +492,9 @@ try:
                 st.write(f"**Filas VISITANTE:** {len(df_visit)}")
             
             if df_local.empty or df_visit.empty:
-                st.error("❌ No se pudieron cargar los datos de los equipos. Verifica que las pestañas tengan datos.")
+                st.error("❌ No se pudieron cargar los datos de los equipos.")
                 st.stop()
             
-            # Obtener clasificación
             codigo_api = obtener_codigo_api(liga_sel)
             
             with st.spinner(f"Obteniendo clasificación..."):
@@ -581,25 +504,21 @@ try:
                 st.error("❌ No se pudo obtener la clasificación desde la API externa.")
                 st.stop()
             
-            # Mostrar equipos disponibles en la API (para depuración)
             with st.expander("🔍 Equipos disponibles en la API (primeros 20)"):
                 st.write(clasif["EQUIPO"].head(20).tolist())
             
             nombre_local_clean = clean(eq_l).upper()
             nombre_visit_clean = clean(eq_v).upper()
             
-            # Buscar equipos usando la nueva función con mapeo
             local_info = encontrar_equipo_en_clasificacion(nombre_local_clean, clasif)
             visit_info = encontrar_equipo_en_clasificacion(nombre_visit_clean, clasif)
             
             if local_info is None:
                 st.error(f"❌ No se encontró '{nombre_local_clean}' en la clasificación")
-                st.info(f"Nombre normalizado: {normalizar_nombre_equipo(nombre_local_clean)}")
                 st.stop()
             
             if visit_info is None:
                 st.error(f"❌ No se encontró '{nombre_visit_clean}' en la clasificación")
-                st.info(f"Nombre normalizado: {normalizar_nombre_equipo(nombre_visit_clean)}")
                 st.stop()
             
             pos_local = local_info["POS"]
@@ -616,7 +535,6 @@ try:
             grupo_local_rival = grupo(pos_visit)
             grupo_visit_rival = grupo(pos_local)
             
-            # Calcular métricas por bloque
             bloques = []
             for b in [1,2,3,4,5]:
                 dfL_b = filtrar_bloque(df_local, b, grupo_local_rival if b == 5 else None)
@@ -632,7 +550,6 @@ try:
             
             pL, pE, pV = prob_1x2(gL, gV)
             
-            # Mostrar resultados
             st.markdown("---")
             st.markdown("### 🏆 PROBABILIDAD DE RESULTADO (1X2)")
             r1, r2, r3 = st.columns(3)
