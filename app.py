@@ -93,7 +93,7 @@ def obtener_clasificacion_desde_historico(id_libro_historico, nombre_pestana_cla
         for i, fila in enumerate(data):
             if fila and len(fila) > 0:
                 if jornada_str.upper() in str(fila[0]).upper():
-                    fila_inicio = i + 1  # +1 porque las filas son 0-indexed
+                    fila_inicio = i + 1
                     break
         
         if fila_inicio is None:
@@ -106,11 +106,9 @@ def obtener_clasificacion_desde_historico(id_libro_historico, nombre_pestana_cla
             fila = data[i]
             if not fila or len(fila) < 2:
                 continue
-            # Si encontramos otra "JORNADA", paramos
             if fila[0] and "JORNADA" in str(fila[0]).upper():
                 break
             
-            # Extraer posición y equipo
             posicion = fila[1] if len(fila) > 1 else None
             equipo = fila[2] if len(fila) > 2 else None
             
@@ -128,6 +126,22 @@ def obtener_clasificacion_desde_historico(id_libro_historico, nombre_pestana_cla
         
     except Exception as e:
         st.warning(f"Error leyendo clasificación histórica: {e}")
+        return pd.DataFrame()
+
+
+def cargar_equivalencias(id_libro_historico, nombre_pestana_equivalencias):
+    """
+    Carga la pestaña de equivalencias de nombres de equipos.
+    """
+    try:
+        libro_historico = client.open_by_key(id_libro_historico)
+        ws_equiv = libro_historico.worksheet(nombre_pestana_equivalencias)
+        data = ws_equiv.get_all_records()
+        if not data:
+            return pd.DataFrame()
+        return pd.DataFrame(data)
+    except Exception as e:
+        st.warning(f"Error cargando equivalencias: {e}")
         return pd.DataFrame()
 
 
@@ -225,22 +239,6 @@ def cargar_pestana_equipo(ws):
         return df
     except Exception as e:
         st.warning(f"Error cargando pestaña: {e}")
-        return pd.DataFrame()
-
-
-def cargar_equivalencias(id_libro_historico, nombre_pestana_equivalencias):
-    """
-    Carga la pestaña de equivalencias de nombres de equipos.
-    """
-    try:
-        libro_historico = client.open_by_key(id_libro_historico)
-        ws_equiv = libro_historico.worksheet(nombre_pestana_equivalencias)
-        data = ws_equiv.get_all_records()
-        if not data:
-            return pd.DataFrame()
-        return pd.DataFrame(data)
-    except Exception as e:
-        st.warning(f"Error cargando equivalencias: {e}")
         return pd.DataFrame()
 
 
@@ -399,27 +397,28 @@ st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>
 try:
     sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
     df_ligas = pd.DataFrame(sh_ligas.get_all_records())
+    
+    # DIAGNÓSTICO: Mostrar lo que se leyó de la hoja LIGAS
+    with st.expander("🔧 DIAGNÓSTICO - Hoja LIGAS"):
+        st.write("**Datos leídos de la hoja LIGAS:**")
+        st.dataframe(df_ligas)
+        st.write(f"**Columnas disponibles:** {list(df_ligas.columns)}")
 
     col1, col2 = st.columns(2)
     liga_sel = col1.selectbox("🏆 Seleccionar Liga", df_ligas['Nombre de la liga'])
     
-    # Obtener la fila de la liga seleccionada
-    liga_fila = df_ligas[df_ligas['Nombre de la liga'] == liga_sel].iloc[0]
-    
-    # Buscar el ID del libro histórico (puede estar en columna "ID del libro historico" o "ID del libro" si es la misma fila)
-    if 'ID del libro historico' in df_ligas.columns:
-        id_historico = liga_fila['ID del libro historico']
-    else:
-        # Si no existe columna específica, usamos la misma lógica pero necesitamos distinguir
-        # En tu caso, la fila 3 tiene el histórico. Buscamos por coincidencia de nombre exacto
-        fila_historico = df_ligas[df_ligas['Nombre de la liga'] == "HISTÓRICO DE PREDICCIONES"]
-        if not fila_historico.empty:
-            id_historico = fila_historico.iloc[0]['ID del libro']
-        else:
-            id_historico = None
+    # Buscar ID del libro histórico - MÉTODO SIMPLIFICADO
+    # Buscar la fila donde Nombre de la liga contiene "HISTORICO" o "HISTÓRICO"
+    id_historico = None
+    for idx, row in df_ligas.iterrows():
+        nombre = str(row['Nombre de la liga']).upper()
+        if 'HISTORICO' in nombre or 'HISTÓRICO' in nombre:
+            id_historico = row['ID del libro']
+            st.success(f"✅ Encontrado libro histórico: {row['Nombre de la liga']} con ID: {id_historico}")
+            break
     
     # ID del libro de datos (el que contiene las pestañas LOCAL/VISITANTE)
-    id_actual = liga_fila['ID del libro']
+    id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
     
     jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
 
@@ -455,7 +454,7 @@ try:
             df_local = cargar_pestana_equipo(ws_local)
             df_visit = cargar_pestana_equipo(ws_visit)
             
-            with st.expander("🔧 Diagnóstico - Columnas encontradas"):
+            with st.expander("🔧 Diagnóstico - Columnas encontradas en equipos"):
                 st.write("**Columnas LOCAL:**", list(df_local.columns) if not df_local.empty else "DataFrame vacío")
                 st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "DataFrame vacío")
                 st.write(f"**Filas LOCAL:** {len(df_local)}")
@@ -467,11 +466,11 @@ try:
             
             # OBTENER CLASIFICACIÓN DESDE LIBRO HISTÓRICO
             if id_historico is None:
-                st.error("❌ No se encontró el ID del libro histórico en la configuración.")
-                st.info("Asegúrate de que en la hoja 'LIGAS' existe una fila con 'HISTÓRICO DE PREDICCIONES' y su ID del libro.")
+                st.error("❌ No se encontró el ID del libro histórico.")
+                st.info("Asegúrate de que en la hoja 'LIGAS' existe una fila cuyo nombre contenga 'HISTORICO' o 'HISTÓRICO'")
                 st.stop()
             
-            # Jornada anterior a la seleccionada (clasificación previa al partido)
+            # Jornada anterior a la seleccionada
             jornada_clasificacion = jor_sel - 1
             if jornada_clasificacion < 1:
                 st.error("❌ No hay clasificación disponible para la jornada 1 (no hay jornada anterior).")
