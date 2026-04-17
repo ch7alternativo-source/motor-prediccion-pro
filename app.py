@@ -1,12 +1,3 @@
-Te lo doy entero, desde la línea 1, ya adaptado a:
-
-- Usar **solo** el libro `HISTORICO DE PREDICCIONES`
-- Leer la pestaña **`CLASIFICACION LALIGA 25/26`**
-- Usar la pestaña **`EQUIVALENCIA NOMENCLATURA LALIGA25/26`**
-- Tomar la **jornada anterior** a la elegida en la app
-- Sin API externa, sin ML, con tu motor métrico actual
-
-```python
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
