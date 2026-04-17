@@ -13,7 +13,7 @@ import requests
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
 
 
-# --- 2. CONEXIÓN A GOOGLE SHEETS ---
+# --- CONEXIÓN A GOOGLE SHEETS ---
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
@@ -34,10 +34,9 @@ def check_user(user_in, pass_in):
         return False
 
 
-# --- 3. SESIÓN ---
+# --- SESIÓN ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
-
 
 if not st.session_state['autenticado']:
     st.markdown("<h2 style='text-align: center;'>🔐 Acceso al Sistema</h2>", unsafe_allow_html=True)
@@ -50,8 +49,7 @@ if not st.session_state['autenticado']:
                 st.rerun()
             else:
                 st.error("Datos incorrectos")
-
-    st.stop()   # ← AQUÍ TERMINA EL LOGIN
+    st.stop()
 
 
 # --- CARGA DE PESTAÑAS ---
@@ -82,14 +80,11 @@ def obtener_clasificacion_api(codigo_liga="PD"):
     api_key = "TU_API_KEY_AQUI"
     url = f"https://api.football-data.org/v4/competitions/{codigo_liga}/standings"
     headers = {'X-Auth-Token': api_key}
-
     try:
         response = requests.get(url, headers=headers)
         data = response.json()
-
         if 'standings' not in data:
             return pd.DataFrame()
-
         tabla_datos = []
         for team in data['standings'][0]['table']:
             tabla_datos.append({
@@ -97,9 +92,7 @@ def obtener_clasificacion_api(codigo_liga="PD"):
                 "POS": team['position'],
                 "PUNTOS": team['points']
             })
-
         return pd.DataFrame(tabla_datos)
-
     except:
         return pd.DataFrame()
 
@@ -133,7 +126,6 @@ def limpiar_ruido(lista):
 # --- CÁLCULO DE MÉTRICAS ---
 def calcular_metricas(dfL, dfV, jornada):
     metricas = {}
-
     columnas = [
         ("GOL FAVOR", "GOL CONTRA", "goles"),
         ("REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA", "remates_totales"),
@@ -142,36 +134,27 @@ def calcular_metricas(dfL, dfV, jornada):
         ("CORNERES FAVOR", "CORNERES CONTRA", "corners"),
         ("TARJETAS AMARILLAS CONTRA", "TARJETAS AMARILLAS FAVOR", "tarjetas"),
     ]
-
     for colF, colC, nombre in columnas:
         lista_L_fav = dfL[colF].tolist()
         lista_V_contra = dfV[colC].tolist()
-
         if jornada >= 14:
             lista_L_fav = limpiar_ruido(lista_L_fav)
             lista_V_contra = limpiar_ruido(lista_V_contra)
-
         if len(lista_L_fav) == 0 or len(lista_V_contra) == 0:
             metricas[nombre + "_local"] = 0
             metricas[nombre + "_visitante"] = 0
             metricas[nombre + "_partido"] = 0
             continue
-
         m_local = (np.mean(lista_L_fav) + np.mean(lista_V_contra)) / 2
-
         lista_V_fav = dfV[colF].tolist()
         lista_L_contra = dfL[colC].tolist()
-
         if jornada >= 14:
             lista_V_fav = limpiar_ruido(lista_V_fav)
             lista_L_contra = limpiar_ruido(lista_L_contra)
-
         m_visit = (np.mean(lista_V_fav) + np.mean(lista_L_contra)) / 2
-
         metricas[nombre + "_local"] = m_local
         metricas[nombre + "_visitante"] = m_visit
         metricas[nombre + "_partido"] = m_local + m_visit
-
     return metricas
 
 
@@ -208,7 +191,6 @@ def poisson(lam, k):
 def prob_1x2(gL, gV):
     max_g = 10
     pL = pE = pV = 0
-
     for i in range(max_g + 1):
         for j in range(max_g + 1):
             p = poisson(gL, i) * poisson(gV, j)
@@ -218,13 +200,11 @@ def prob_1x2(gL, gV):
                 pE += p
             else:
                 pV += p
-
     return pL, pE, pV
 
 
 # --- MODELOS ML ---
 RUTA_MODELOS = "models"
-
 
 def cargar_modelo(nombre_fichero):
     ruta = os.path.join(RUTA_MODELOS, nombre_fichero)
@@ -235,27 +215,18 @@ def cargar_modelo(nombre_fichero):
     except:
         return None
 
-
 def construir_features_equipo(df):
     feats = {}
     cols_numericas = [c for c in df.columns if c not in ["RIVAL", "FECHA"]]
-
     for col in cols_numericas:
         feats[f"{col}_media"] = df[col].mean()
         feats[f"{col}_std"] = df[col].std()
-
     return pd.DataFrame([feats])
-
 
 def predecir_ml_metricas(df_local, df_visit):
     X_local = construir_features_equipo(df_local)
     X_visit = construir_features_equipo(df_visit)
-
-    X = pd.concat([
-        X_local.add_prefix("L_"),
-        X_visit.add_prefix("V_")
-    ], axis=1)
-
+    X = pd.concat([X_local.add_prefix("L_"), X_visit.add_prefix("V_")], axis=1)
     modelos_info = {
         "goles_local": "goles_local_xgb.pkl",
         "goles_visitante": "goles_visitante_xgb.pkl",
@@ -270,26 +241,21 @@ def predecir_ml_metricas(df_local, df_visit):
         "tarjetas_local": "tarjetas_local_xgb.pkl",
         "tarjetas_visitante": "tarjetas_visitante_xgb.pkl",
     }
-
     resultados_ml = {}
     algun_modelo = False
-
     for clave, fichero in modelos_info.items():
         modelo = cargar_modelo(fichero)
         if modelo is None:
             resultados_ml[clave] = None
             continue
-
         algun_modelo = True
         try:
             pred = modelo.predict(X)[0]
             resultados_ml[clave] = float(pred)
         except:
             resultados_ml[clave] = None
-
     if not algun_modelo:
         return None
-
     for base in ["goles", "remates_totales", "remates_puerta", "paradas", "corners", "tarjetas"]:
         l = resultados_ml.get(f"{base}_local")
         v = resultados_ml.get(f"{base}_visitante")
@@ -297,32 +263,27 @@ def predecir_ml_metricas(df_local, df_visit):
             resultados_ml[f"{base}_partido"] = l + v
         else:
             resultados_ml[f"{base}_partido"] = None
-
     return resultados_ml
-
 
 def combinar_metrica_y_ml(metricas_metrica, metricas_ml, jornada):
     if metricas_ml is None:
         return metricas_metrica, False
-
     alpha_m, alpha_ml = pesos_por_jornada(jornada)
     final = {}
-
     for k, v in metricas_metrica.items():
         ml_val = metricas_ml.get(k)
         if ml_val is None:
             final[k] = v
         else:
             final[k] = alpha_m * v + alpha_ml * ml_val
-
     return final, True
 
 
 # --- INTERFAZ PRINCIPAL ---
 st.markdown("<div class='main-title'>⚽ ANALIZADOR DE PARTIDOS PRO</div>", unsafe_allow_html=True)
 
-
 try:
+    # Cargar lista de ligas
     sh_ligas = client.open_by_key(ID_CONTROL).worksheet("LIGAS")
     df_ligas = pd.DataFrame(sh_ligas.get_all_records())
 
@@ -331,10 +292,14 @@ try:
     id_actual = df_ligas[df_ligas['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
     jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
 
-    libro = client.open_by_key(id_actual)
+    # Cachear pestañas en session_state para no llamar a Sheets en cada rerun
+    cache_key = f"pestanas_{id_actual}"
+    if cache_key not in st.session_state:
+        libro_temp = client.open_by_key(id_actual)
+        excluir = ["config", "partido a analizar", "predicciones"]
+        st.session_state[cache_key] = [s.title for s in libro_temp.worksheets() if s.title not in excluir]
 
-    excluir = ["config", "partido a analizar", "predicciones"]
-    pestanas = [s.title for s in libro.worksheets() if s.title not in excluir]
+    pestanas = st.session_state[cache_key]
 
     locales = [t for t in pestanas if "LOCAL" in t.upper()]
     visitantes = [t for t in pestanas if "VISITANTE" in t.upper()]
@@ -350,14 +315,17 @@ try:
 
         st.divider()
 
+        # Abrir libro solo al pulsar el botón
+        libro = client.open_by_key(id_actual)
+
         ws_local = libro.worksheet(eq_l)
         ws_visit = libro.worksheet(eq_v)
 
         df_local = cargar_pestana_equipo(ws_local)
         df_visit = cargar_pestana_equipo(ws_visit)
 
-        # --- CLASIFICACIÓN DESDE API EXTERNA ---
-        codigo_api = "PD"   # LaLiga
+        # Clasificación desde API externa
+        codigo_api = "PD"
         clasif = obtener_clasificacion_api(codigo_api)
 
         if clasif.empty:
@@ -380,7 +348,6 @@ try:
         for b in [1,2,3,4,5]:
             dfL_b = filtrar_bloque(df_local, b, True, grupo_local if b == 5 else None)
             dfV_b = filtrar_bloque(df_visit, b, False, grupo_visit if b == 5 else None)
-
             metricas_b = calcular_metricas(dfL_b, dfV_b, jor_sel)
             bloques_local.append(metricas_b)
 
@@ -446,7 +413,6 @@ try:
         }
 
         st.table(pd.DataFrame(tabla))
-
 
 except Exception as e:
     st.error(f"Error: {e}")
