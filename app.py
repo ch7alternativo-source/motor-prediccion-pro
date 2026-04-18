@@ -154,21 +154,49 @@ def cargar_equivalencias(id_libro_historico, nombre_pestana_equivalencias):
 
 def obtener_equivalencia_nombre(nombre_app, df_equivalencias):
     """
-    Busca en la tabla de equivalencias el nombre de clasificación
-    que corresponde al nombre del equipo tal como viene de la app.
-    Si no hay equivalencia, devuelve el mismo nombre en mayúsculas.
+    Convierte el nombre del equipo tal como aparece en las pestañas del libro
+    LaLiga 25/26 (y en los desplegables) al nombre equivalente en la pestaña
+    de clasificación, usando la tabla de equivalencias.
+
+    Estrategia de búsqueda (de más a menos estricta):
+      1. Coincidencia exacta en Col A  →  devuelve Col B
+      2. Col A es subcadena del nombre buscado  →  devuelve Col B
+      3. Nombre buscado es subcadena de Col B  →  devuelve Col B
+      4. Col B es subcadena del nombre buscado  →  devuelve Col B
+      5. Sin coincidencia  →  devuelve el nombre original
     """
     if df_equivalencias.empty:
         return nombre_app.upper().strip()
 
     nombre_buscar = nombre_app.upper().strip()
 
+    # Construir lista de pares (col_a, col_b) limpios
+    pares = []
     for _, row in df_equivalencias.iterrows():
-        nombre_col_a = str(row.iloc[0]).upper().strip() if pd.notna(row.iloc[0]) else ""
-        if nombre_col_a == nombre_buscar:
-            nombre_col_b = str(row.iloc[1]).upper().strip() if pd.notna(row.iloc[1]) else ""
-            if nombre_col_b:
-                return nombre_col_b
+        col_a = str(row.iloc[0]).upper().strip() if pd.notna(row.iloc[0]) else ""
+        col_b = str(row.iloc[1]).upper().strip() if pd.notna(row.iloc[1]) else ""
+        if col_a or col_b:
+            pares.append((col_a, col_b))
+
+    # 1. Coincidencia exacta Col A
+    for col_a, col_b in pares:
+        if col_a == nombre_buscar and col_b:
+            return col_b
+
+    # 2. Col A es subcadena del nombre buscado  (p.ej. "MALLORCA" en "RCD MALLORCA")
+    for col_a, col_b in pares:
+        if col_a and col_a in nombre_buscar and col_b:
+            return col_b
+
+    # 3. Nombre buscado es subcadena de Col B  (p.ej. "MALLORCA" dentro de "RCD MALLORCA")
+    for col_a, col_b in pares:
+        if col_b and nombre_buscar in col_b and col_b:
+            return col_b
+
+    # 4. Col B es subcadena del nombre buscado
+    for col_a, col_b in pares:
+        if col_b and col_b in nombre_buscar and col_b:
+            return col_b
 
     return nombre_buscar
 
@@ -544,7 +572,8 @@ try:
 
             st.success(
                 f"✅ Clasificación Jornada {jornada_clasificacion}: "
-                f"{nombre_local_clasif} (Pos {pos_local}) | {nombre_visit_clasif} (Pos {pos_visit})"
+                f"{nombre_local_clean} → **{nombre_local_clasif}** (Pos {pos_local}) | "
+                f"{nombre_visit_clean} → **{nombre_visit_clasif}** (Pos {pos_visit})"
             )
 
             grupo_local_rival = grupo(pos_visit)
