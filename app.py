@@ -73,21 +73,24 @@ def obtener_clasificacion_desde_historico(id_libro_historico, nombre_pestana_cla
             return pd.DataFrame()
 
         # --- Fila 0 (cabecera): localizar la columna de la jornada buscada ---
+        # Se busca por el NÚMERO de jornada dentro de la celda, ignorando el texto
+        # exacto (tolera errores tipográficos como "JORNDADA", "JORNDA", etc.)
         cabecera = data[0]
-        jornada_str = str(jornada_buscada).strip()
         col_jornada = None
 
         for idx, celda in enumerate(cabecera):
-            celda_limpia = str(celda).upper().strip()
-            # Acepta "JORNADA 3", "JORNADA3", "3", etc.
-            if celda_limpia == f"JORNADA {jornada_str}" or \
-               celda_limpia == f"JORNADA{jornada_str}" or \
-               celda_limpia == jornada_str:
+            celda_limpia = str(celda).strip()
+            # Extraer todos los dígitos que aparezcan en la celda
+            numeros = re.findall(r'\d+', celda_limpia)
+            if numeros and int(numeros[0]) == int(jornada_buscada):
                 col_jornada = idx
                 break
 
         if col_jornada is None:
-            st.warning(f"No se encontró la columna 'JORNADA {jornada_buscada}' en la fila de cabecera.")
+            st.warning(
+                f"No se encontró la columna de la Jornada {jornada_buscada} en la fila de cabecera. "
+                f"Cabecera leída: {cabecera}"
+            )
             return pd.DataFrame()
 
         # --- Filas 1-20: leer posición (col 0) y equipo (col_jornada) ---
