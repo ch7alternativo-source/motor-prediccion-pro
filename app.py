@@ -1,3 +1,6 @@
+
+Copiar
+
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -56,7 +59,7 @@ def cargar_modelos_ml():
     Compatible con cualquier estructura de pkl.
     """
     modelos = {}
-    carpeta = "models"
+    carpeta = "models/models"
  
     if not os.path.exists(carpeta):
         return modelos
