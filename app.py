@@ -17,17 +17,8 @@ client = gspread.authorize(creds)
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
 
 # =========================================================
-# CARGA DE MODELOS ML CON DIAGNÓSTICO
+# CARGA DE MODELOS ML - VERSIÓN ADAPTADA A TU ESTRUCTURA
 # =========================================================
-PREFIJOS_METRICAS = {
-    "GOLES_FAVOR": "goles_local",
-    "GOLES_CONTRA": "goles_visitante",
-    "REMATES_TOTALES": "remates_totales",
-    "REMATES_PUERTA": "remates_puerta",
-    "PARADAS": "paradas",
-    "CORNERS": "corners",
-    "TARJETAS": "tarjetas",
-}
 
 FEATURES_MODELO = [
     "ES_LOCAL", "JORNADA", "POSICION_RIVAL",
@@ -65,46 +56,47 @@ def cargar_modelos_ml():
         try:
             obj = joblib.load(ruta)
             st.sidebar.write(f"Tipo: {type(obj).__name__}")
+            st.sidebar.write(f"Claves principales: {list(obj.keys())}")
             
-            if isinstance(obj, dict):
-                claves = list(obj.keys())
-                st.sidebar.write(f"Claves del diccionario: {claves}")
+            if isinstance(obj, dict) and 'modelos' in obj:
+                modelos_dict = obj['modelos']
+                nombres_modelos = list(modelos_dict.keys())
+                st.sidebar.write(f"📋 NOMBRES DE LOS MODELOS: {nombres_modelos}")
                 
-                for clave, valor in obj.items():
-                    if hasattr(valor, 'predict'):
-                        clave_upper = clave.upper()
-                        if "GOLES_FAVOR" in clave_upper:
-                            modelos.setdefault("goles_local", []).append(valor)
-                            st.sidebar.success(f"  → goles_local")
-                        elif "GOLES_CONTRA" in clave_upper:
-                            modelos.setdefault("goles_visitante", []).append(valor)
-                            st.sidebar.success(f"  → goles_visitante")
-                        elif "REMATES_TOTALES" in clave_upper:
-                            modelos.setdefault("remates_totales", []).append(valor)
-                            st.sidebar.success(f"  → remates_totales")
-                        elif "REMATES_PUERTA" in clave_upper:
-                            modelos.setdefault("remates_puerta", []).append(valor)
-                            st.sidebar.success(f"  → remates_puerta")
-                        elif "PARADAS" in clave_upper:
-                            modelos.setdefault("paradas", []).append(valor)
-                            st.sidebar.success(f"  → paradas")
-                        elif "CORNERS" in clave_upper:
-                            modelos.setdefault("corners", []).append(valor)
-                            st.sidebar.success(f"  → corners")
-                        elif "TARJETAS" in clave_upper:
-                            modelos.setdefault("tarjetas", []).append(valor)
-                            st.sidebar.success(f"  → tarjetas")
+                # Mostrar cada modelo y su tipo
+                for nombre, mod in modelos_dict.items():
+                    st.sidebar.write(f"  - {nombre}: {type(mod).__name__}")
+                    if hasattr(mod, 'predict'):
+                        # Asignar según el nombre del modelo
+                        nombre_lower = nombre.lower()
+                        if 'goles_local' in nombre_lower or 'goles_favor' in nombre_lower or 'gf' in nombre_lower:
+                            modelos.setdefault("goles_local", []).append(mod)
+                            st.sidebar.success(f"    → Asignado a goles_local")
+                        elif 'goles_visitante' in nombre_lower or 'goles_contra' in nombre_lower or 'gc' in nombre_lower:
+                            modelos.setdefault("goles_visitante", []).append(mod)
+                            st.sidebar.success(f"    → Asignado a goles_visitante")
+                        elif 'remates_totales' in nombre_lower:
+                            modelos.setdefault("remates_totales", []).append(mod)
+                            st.sidebar.success(f"    → Asignado a remates_totales")
+                        elif 'remates_puerta' in nombre_lower:
+                            modelos.setdefault("remates_puerta", []).append(mod)
+                            st.sidebar.success(f"    → Asignado a remates_puerta")
+                        elif 'paradas' in nombre_lower:
+                            modelos.setdefault("paradas", []).append(mod)
+                            st.sidebar.success(f"    → Asignado a paradas")
+                        elif 'corners' in nombre_lower or 'corneres' in nombre_lower:
+                            modelos.setdefault("corners", []).append(mod)
+                            st.sidebar.success(f"    → Asignado a corners")
+                        elif 'tarjetas' in nombre_lower:
+                            modelos.setdefault("tarjetas", []).append(mod)
+                            st.sidebar.success(f"    → Asignado a tarjetas")
                         else:
-                            modelos.setdefault("goles_local", []).append(valor)
-                            st.sidebar.success(f"  → goles_local (default)")
-                    elif isinstance(valor, list):
-                        for item in valor:
-                            if hasattr(item, 'predict'):
-                                modelos.setdefault("goles_local", []).append(item)
-                                st.sidebar.success(f"  → modelo desde lista")
-            elif hasattr(obj, 'predict'):
-                modelos.setdefault("goles_local", []).append(obj)
-                st.sidebar.success(f"Modelo directo → goles_local")
+                            modelos.setdefault("goles_local", []).append(mod)
+                            st.sidebar.info(f"    → Asignado a goles_local (default)")
+            
+            if 'targets' in obj:
+                st.sidebar.write(f"Targets: {obj['targets']}")
+                
         except Exception as e:
             st.sidebar.error(f"Error: {e}")
     
@@ -117,6 +109,10 @@ def cargar_modelos_ml():
         st.sidebar.warning("⚠️ Sin modelos ML - Usando solo métricas")
     
     return modelos
+
+# =========================================================
+# FUNCIONES AUXILIARES
+# =========================================================
 
 def calcular_ma(df, col, ventana):
     if col not in df.columns or df.empty:
@@ -260,6 +256,270 @@ def check_user(user_in, pass_in):
     except:
         return False
 
+def obtener_clasificacion_desde_historico(id_libro_historico, nombre_pestana_clasificacion, jornada_buscada):
+    try:
+        libro_historico = client.open_by_key(id_libro_historico)
+        ws_clasificacion = libro_historico.worksheet(nombre_pestana_clasificacion)
+        data = ws_clasificacion.get_all_values()
+        if not data or len(data) < 2:
+            return pd.DataFrame()
+        cabecera = data[0]
+        col_jornada = None
+        for idx, celda in enumerate(cabecera):
+            celda_limpia = str(celda).strip()
+            numeros = re.findall(r'\d+', celda_limpia)
+            if numeros and int(numeros[0]) == int(jornada_buscada):
+                col_jornada = idx
+                break
+        if col_jornada is None:
+            return pd.DataFrame()
+        clasificacion = []
+        for fila in data[1:]:
+            if len(fila) <= col_jornada:
+                continue
+            pos_raw = str(fila[0]).strip()
+            equipo_raw = str(fila[col_jornada]).strip()
+            if not pos_raw or not equipo_raw:
+                continue
+            try:
+                pos_int = int(pos_raw)
+            except ValueError:
+                continue
+            if equipo_raw.upper() in ("", "NONE", "N/A", "-"):
+                continue
+            clasificacion.append({"EQUIPO": equipo_raw.upper().strip(), "POS": pos_int})
+        return pd.DataFrame(clasificacion) if clasificacion else pd.DataFrame()
+    except Exception as e:
+        st.warning(f"Error leyendo clasificación: {e}")
+        return pd.DataFrame()
+
+def cargar_equivalencias(id_libro_historico, nombre_pestana_equivalencias):
+    try:
+        libro_historico = client.open_by_key(id_libro_historico)
+        ws_equiv = libro_historico.worksheet(nombre_pestana_equivalencias)
+        data = ws_equiv.get_all_values()
+        if not data or len(data) < 2:
+            return pd.DataFrame()
+        cabecera = data[0]
+        filas = data[1:]
+        return pd.DataFrame(filas, columns=cabecera if cabecera else None)
+    except Exception as e:
+        st.warning(f"Error cargando equivalencias: {e}")
+        return pd.DataFrame()
+
+def obtener_equivalencia_nombre(nombre_app, df_equivalencias):
+    if df_equivalencias.empty:
+        return nombre_app.upper().strip()
+    nombre_buscar = nombre_app.upper().strip()
+    pares = []
+    for _, row in df_equivalencias.iterrows():
+        col_a = str(row.iloc[0]).upper().strip() if pd.notna(row.iloc[0]) else ""
+        col_b = str(row.iloc[1]).upper().strip() if pd.notna(row.iloc[1]) else ""
+        if col_a or col_b:
+            pares.append((col_a, col_b))
+    for col_a, col_b in pares:
+        if col_a == nombre_buscar and col_b:
+            return col_b
+    for col_a, col_b in pares:
+        if col_a and col_a in nombre_buscar and col_b:
+            return col_b
+    for col_a, col_b in pares:
+        if col_b and nombre_buscar in col_b and col_b:
+            return col_b
+    for col_a, col_b in pares:
+        if col_b and col_b in nombre_buscar and col_b:
+            return col_b
+    return nombre_buscar
+
+def detectar_columna(df, palabras_clave):
+    for col in df.columns.tolist():
+        col_lower = col.lower()
+        for palabra in palabras_clave:
+            if palabra.lower() in col_lower:
+                return col
+    return None
+
+def mapear_columnas(df):
+    mapeo = {}
+    columnas_buscar = {
+        "GOL FAVOR": ["gol favor", "goles favor", "gf", "goles_marcados"],
+        "GOL CONTRA": ["gol contra", "goles contra", "gc", "goles_recibidos"],
+        "REMATES TOTALES FAVOR": ["remates totales favor", "remates totales f", "total shots for"],
+        "REMATES TOTALES CONTRA": ["remates totales contra", "remates totales c", "total shots against"],
+        "REMATES PUERTA FAVOR": ["remates puerta favor", "remates a puerta favor", "shots on target for"],
+        "REMATES PUERTA CONTRA": ["remates puerta contra", "remates a puerta contra", "shots on target against"],
+        "PARADAS FAVOR": ["paradas favor", "paradas f", "saves for"],
+        "PARADAS CONTRA": ["paradas contra", "paradas c", "saves against"],
+        "CORNERES FAVOR": ["corneres favor", "corners favor", "córners favor"],
+        "CORNERES CONTRA": ["corneres contra", "corners contra", "córners contra"],
+        "TARJETAS AMARILLAS FAVOR": ["tarjetas amarillas favor", "amarillas favor", "yellow cards for"],
+        "TARJETAS AMARILLAS CONTRA": ["tarjetas amarillas contra", "amarillas contra", "yellow cards against"],
+        "JORNADA": ["jornada", "jor", "round", "matchday"],
+        "RIVAL": ["rival", "oponente", "opponent"],
+        "FECHA": ["fecha", "date", "fecha partido"],
+    }
+    for nombre_estandar, patrones in columnas_buscar.items():
+        col_encontrada = detectar_columna(df, patrones)
+        if col_encontrada:
+            mapeo[col_encontrada] = nombre_estandar
+    return mapeo
+
+def normalizar_y_validar(df):
+    if df.empty:
+        return df
+    mapeo = mapear_columnas(df)
+    if mapeo:
+        df = df.rename(columns=mapeo)
+    df.columns = [str(col).strip().upper() for col in df.columns]
+    columnas_numericas = [
+        "GOL FAVOR", "GOL CONTRA", "REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA",
+        "REMATES PUERTA FAVOR", "REMATES PUERTA CONTRA", "PARADAS FAVOR", "PARADAS CONTRA",
+        "CORNERES FAVOR", "CORNERES CONTRA", "TARJETAS AMARILLAS FAVOR", "TARJETAS AMARILLAS CONTRA",
+        "JORNADA"
+    ]
+    for col in columnas_numericas:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    if "FECHA" in df.columns:
+        df["FECHA"] = pd.to_datetime(df["FECHA"], errors='coerce', dayfirst=True)
+        df = df.dropna(subset=["FECHA"])
+        df = df.sort_values("FECHA")
+    if "JORNADA" in df.columns:
+        df = df.dropna(subset=["JORNADA"])
+        df["JORNADA"] = df["JORNADA"].astype(int)
+    return df
+
+def cargar_pestana_equipo(ws):
+    try:
+        data = ws.get_all_records()
+        if not data:
+            return pd.DataFrame()
+        df = pd.DataFrame(data)
+        if df.empty or len(df.columns) == 0:
+            return pd.DataFrame()
+        df = normalizar_y_validar(df)
+        return df
+    except Exception as e:
+        st.warning(f"Error cargando pestaña: {e}")
+        return pd.DataFrame()
+
+def filtrar_bloque(df, tipo, grupo=None):
+    if df.empty:
+        return df
+    if tipo == 1:
+        return df.copy()
+    if tipo == 2:
+        return df[df["JORNADA"] >= 1].copy() if "JORNADA" in df.columns else df.copy()
+    if tipo == 3:
+        return df.tail(5).copy()
+    if tipo == 4:
+        return df.tail(3).copy()
+    if tipo == 5:
+        if grupo is not None and "POSICION RIVAL" in df.columns:
+            return df[df["POSICION RIVAL"].isin(grupo)].copy()
+    return df.copy()
+
+def limpiar_ruido(lista):
+    lista = [x for x in lista if pd.notna(x)]
+    if len(lista) <= 2:
+        return lista
+    lista = sorted(lista)
+    return lista[1:-1]
+
+def calcular_metricas(dfL, dfV, jornada):
+    metricas = {}
+    columnas_def = [
+        ("GOL FAVOR", "GOL CONTRA", "goles"),
+        ("REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA", "remates_totales"),
+        ("REMATES PUERTA FAVOR", "REMATES PUERTA CONTRA", "remates_puerta"),
+        ("PARADAS FAVOR", "PARADAS CONTRA", "paradas"),
+        ("CORNERES FAVOR", "CORNERES CONTRA", "corners"),
+        ("TARJETAS AMARILLAS CONTRA", "TARJETAS AMARILLAS FAVOR", "tarjetas"),
+    ]
+    for colF, colC, nombre in columnas_def:
+        tieneF_L = colF in dfL.columns
+        tieneC_L = colC in dfL.columns
+        tieneF_V = colF in dfV.columns
+        tieneC_V = colC in dfV.columns
+        if not (tieneF_L and tieneC_L and tieneF_V and tieneC_V):
+            metricas[nombre + "_local"] = 0
+            metricas[nombre + "_visitante"] = 0
+            metricas[nombre + "_partido"] = 0
+            continue
+        try:
+            lista_L_fav = dfL[colF].dropna().tolist()
+            lista_V_contra = dfV[colC].dropna().tolist()
+            if jornada >= 14:
+                lista_L_fav = limpiar_ruido(lista_L_fav)
+                lista_V_contra = limpiar_ruido(lista_V_contra)
+            m_local = (np.mean(lista_L_fav) + np.mean(lista_V_contra)) / 2 if lista_L_fav and lista_V_contra else 0
+
+            lista_V_fav = dfV[colF].dropna().tolist()
+            lista_L_contra = dfL[colC].dropna().tolist()
+            if jornada >= 14:
+                lista_V_fav = limpiar_ruido(lista_V_fav)
+                lista_L_contra = limpiar_ruido(lista_L_contra)
+            m_visit = (np.mean(lista_V_fav) + np.mean(lista_L_contra)) / 2 if lista_V_fav and lista_L_contra else 0
+
+            metricas[nombre + "_local"] = m_local
+            metricas[nombre + "_visitante"] = m_visit
+            metricas[nombre + "_partido"] = m_local + m_visit
+        except:
+            metricas[nombre + "_local"] = 0
+            metricas[nombre + "_visitante"] = 0
+            metricas[nombre + "_partido"] = 0
+    return metricas
+
+def combinar_bloques(b1, b2, b3, b4, b5):
+    final = {}
+    for k in b1.keys():
+        final[k] = (b1[k] * 0.10 + b2[k] * 0.40 + b3[k] * 0.15 + b4[k] * 0.25 + b5[k] * 0.10)
+    return final
+
+def poisson(lam, k):
+    if lam <= 0:
+        return 1 if k == 0 else 0
+    try:
+        return (lam**k * exp(-lam)) / factorial(k)
+    except:
+        return 0
+
+def prob_1x2(gL, gV):
+    max_g = 8
+    pL = pE = pV = 0.0
+    for i in range(max_g + 1):
+        for j in range(max_g + 1):
+            try:
+                p = poisson(gL, i) * poisson(gV, j)
+                if i > j:
+                    pL += p
+                elif i == j:
+                    pE += p
+                else:
+                    pV += p
+            except:
+                continue
+    total = pL + pE + pV
+    if total > 0:
+        pL /= total
+        pE /= total
+        pV /= total
+    return pL, pE, pV
+
+def grupo(pos):
+    if 1 <= pos <= 4:
+        return [1, 2, 3, 4]
+    if 5 <= pos <= 10:
+        return [5, 6, 7, 8, 9, 10]
+    if 11 <= pos <= 16:
+        return [11, 12, 13, 14, 15, 16]
+    return list(range(17, 26))
+
+# =========================================================
+# AUTENTICACIÓN
+# =========================================================
+
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
@@ -276,8 +536,13 @@ if not st.session_state['autenticado']:
                 st.error("Datos incorrectos")
     st.stop()
 
+# =========================================================
+# INTERFAZ PRINCIPAL
+# =========================================================
+
 st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>", unsafe_allow_html=True)
 
+# Cargar modelos ML
 modelos_ml = cargar_modelos_ml()
 
 try:
@@ -296,20 +561,26 @@ try:
         id_historico = str(df_historico.iloc[0]['ID del libro']).strip()
     
     if df_competiciones.empty:
-        st.error("No hay competiciones disponibles")
+        st.error("❌ No hay competiciones disponibles en la hoja LIGAS.")
         st.stop()
     
     col1, col2 = st.columns(2)
-    liga_sel = col1.selectbox("Seleccionar Liga", df_competiciones['Nombre de la liga'].tolist())
-    jor_sel = col2.selectbox("Jornada", list(range(1, 45)))
+    liga_sel = col1.selectbox("🏆 Seleccionar Liga", df_competiciones['Nombre de la liga'].tolist())
+    
+    PESTANA_CLASIFICACION = "CLASIFICACION LALIGA 25/26"
+    PESTANA_EQUIVALENCIAS = "EQUIVALENCIA NOMENCLATURA LALIGA25/26"
     
     id_actual = df_competiciones[df_competiciones['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
+    jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
     
     cache_key = f"pestanas_{id_actual}"
     if cache_key not in st.session_state:
         libro_temp = client.open_by_key(id_actual)
         excluir = ["config", "partido a analizar", "predicciones"]
-        st.session_state[cache_key] = [s.title for s in libro_temp.worksheets() if s.title.lower() not in [e.lower() for e in excluir]]
+        st.session_state[cache_key] = [
+            s.title for s in libro_temp.worksheets()
+            if s.title.lower() not in [e.lower() for e in excluir]
+        ]
     
     pestanas = st.session_state[cache_key]
     locales = [t for t in pestanas if "LOCAL" in t.upper()]
@@ -319,13 +590,106 @@ try:
         return n.replace(" LOCAL", "").replace(" VISITANTE", "").strip()
     
     cl, cv = st.columns(2)
-    eq_l = cl.selectbox("Equipo Local", locales, format_func=clean)
+    eq_l = cl.selectbox("🏠 Equipo Local", locales, format_func=clean)
     visitantes_filtrados = [v for v in visitantes if clean(eq_l).upper() not in v.upper()]
-    eq_v = cv.selectbox("Equipo Visitante", visitantes_filtrados, format_func=clean)
+    eq_v = cv.selectbox("🚀 Equipo Visitante", visitantes_filtrados, format_func=clean)
     
-    if st.button("GENERAR ANALISIS"):
+    if st.button("📊 GENERAR ANÁLISIS"):
         st.divider()
-        st.info("Analisis generado correctamente. Revisa el sidebar para ver el diagnostico ML.")
         
-except Exception as e:
-    st.error(f"Error: {e}")
+        try:
+            libro = client.open_by_key(id_actual)
+            ws_local = libro.worksheet(eq_l)
+            ws_visit = libro.worksheet(eq_v)
+            
+            df_local = cargar_pestana_equipo(ws_local)
+            df_visit = cargar_pestana_equipo(ws_visit)
+            
+            with st.expander("🔧 Diagnóstico - Columnas encontradas"):
+                st.write("**Columnas LOCAL:**", list(df_local.columns) if not df_local.empty else "Vacío")
+                st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "Vacío")
+            
+            if df_local.empty or df_visit.empty:
+                st.error("❌ No se pudieron cargar los datos de los equipos.")
+                st.stop()
+            
+            if not id_historico:
+                st.error("❌ No se encontró el ID del libro histórico.")
+                st.stop()
+            
+            jornada_clasificacion = jor_sel - 1
+            if jornada_clasificacion < 1:
+                st.error("❌ No hay clasificación para la Jornada 1.")
+                st.stop()
+            
+            df_equivalencias = cargar_equivalencias(id_historico, PESTANA_EQUIVALENCIAS)
+            
+            clasif = obtener_clasificacion_desde_historico(id_historico, PESTANA_CLASIFICACION, jornada_clasificacion)
+            
+            if clasif.empty:
+                st.error(f"❌ No se pudo obtener la clasificación para la Jornada {jornada_clasificacion}.")
+                st.stop()
+            
+            nombre_local_clean = clean(eq_l).upper()
+            nombre_visit_clean = clean(eq_v).upper()
+            
+            nombre_local_clasif = obtener_equivalencia_nombre(nombre_local_clean, df_equivalencias)
+            nombre_visit_clasif = obtener_equivalencia_nombre(nombre_visit_clean, df_equivalencias)
+            
+            local_info = clasif[clasif["EQUIPO"] == nombre_local_clasif]
+            visit_info = clasif[clasif["EQUIPO"] == nombre_visit_clasif]
+            
+            if local_info.empty or visit_info.empty:
+                st.error("No se encontraron los equipos en la clasificación.")
+                st.stop()
+            
+            pos_local = local_info.iloc[0]["POS"]
+            pos_visit = visit_info.iloc[0]["POS"]
+            
+            st.success(f"✅ Posiciones: {nombre_local_clasif} (Pos {pos_local}) | {nombre_visit_clasif} (Pos {pos_visit})")
+            
+            grupo_local_rival = grupo(pos_visit)
+            grupo_visit_rival = grupo(pos_local)
+            
+            # Rama métrica
+            bloques = []
+            for b in [1, 2, 3, 4, 5]:
+                dfL_b = filtrar_bloque(df_local, b, grupo_local_rival if b == 5 else None)
+                dfV_b = filtrar_bloque(df_visit, b, grupo_visit_rival if b == 5 else None)
+                metricas_b = calcular_metricas(dfL_b, dfV_b, jor_sel)
+                bloques.append(metricas_b)
+            
+            b1, b2, b3, b4, b5 = bloques
+            metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
+            
+            # Rama ML
+            feats_local = construir_features_ml(df_local, pd.DataFrame(), True, jor_sel, pos_visit)
+            feats_visit = construir_features_ml(pd.DataFrame(), df_visit, False, jor_sel, pos_local)
+            pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
+            
+            # Combinación final
+            metricas_finales, usado_ml = combinar_metrica_ml(metricas_metrica, pred_ml, jor_sel)
+            
+            if usado_ml:
+                st.info(f"🤖 ML activo combinado (jornada {jor_sel})")
+            else:
+                st.info("📐 Solo rama métrica")
+            
+            gL = metricas_finales.get("goles_local", 0)
+            gV = metricas_finales.get("goles_visitante", 0)
+            
+            pL, pE, pV = prob_1x2(gL, gV)
+            
+            st.markdown("### 🏆 PROBABILIDAD 1X2")
+            r1, r2, r3 = st.columns(3)
+            r1.metric("Victoria Local", f"{pL*100:.1f}%")
+            r2.metric("Empate", f"{pE*100:.1f}%")
+            r3.metric("Victoria Visitante", f"{pV*100:.1f}%")
+            
+            st.markdown("### 🔥 MERCADOS DE GOLES")
+            total_goles = gL + gV
+            p_over15 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1))
+            p_over25 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1) + poisson(total_goles, 2))
+            p_btts = (1 - poisson(gL, 0)) * (1 - poisson(gV, 0))
+            
+           
