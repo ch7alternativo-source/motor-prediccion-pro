@@ -17,7 +17,7 @@ client = gspread.authorize(creds)
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
 
 # =========================================================
-# CARGA DE MODELOS ML - VERSIÓN ADAPTADA A TU ESTRUCTURA
+# CARGA DE MODELOS ML
 # =========================================================
 
 FEATURES_MODELO = [
@@ -63,11 +63,9 @@ def cargar_modelos_ml():
                 nombres_modelos = list(modelos_dict.keys())
                 st.sidebar.write(f"📋 NOMBRES DE LOS MODELOS: {nombres_modelos}")
                 
-                # Mostrar cada modelo y su tipo
                 for nombre, mod in modelos_dict.items():
                     st.sidebar.write(f"  - {nombre}: {type(mod).__name__}")
                     if hasattr(mod, 'predict'):
-                        # Asignar según el nombre del modelo
                         nombre_lower = nombre.lower()
                         if 'goles_local' in nombre_lower or 'goles_favor' in nombre_lower or 'gf' in nombre_lower:
                             modelos.setdefault("goles_local", []).append(mod)
@@ -542,7 +540,6 @@ if not st.session_state['autenticado']:
 
 st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>", unsafe_allow_html=True)
 
-# Cargar modelos ML
 modelos_ml = cargar_modelos_ml()
 
 try:
@@ -651,7 +648,6 @@ try:
             grupo_local_rival = grupo(pos_visit)
             grupo_visit_rival = grupo(pos_local)
             
-            # Rama métrica
             bloques = []
             for b in [1, 2, 3, 4, 5]:
                 dfL_b = filtrar_bloque(df_local, b, grupo_local_rival if b == 5 else None)
@@ -662,12 +658,10 @@ try:
             b1, b2, b3, b4, b5 = bloques
             metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
             
-            # Rama ML
             feats_local = construir_features_ml(df_local, pd.DataFrame(), True, jor_sel, pos_visit)
             feats_visit = construir_features_ml(pd.DataFrame(), df_visit, False, jor_sel, pos_local)
             pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
             
-            # Combinación final
             metricas_finales, usado_ml = combinar_metrica_ml(metricas_metrica, pred_ml, jor_sel)
             
             if usado_ml:
@@ -692,4 +686,6 @@ try:
             p_over25 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1) + poisson(total_goles, 2))
             p_btts = (1 - poisson(gL, 0)) * (1 - poisson(gV, 0))
             
-           
+            g1, g2, g3 = st.columns(3)
+            g1.metric("Más de 1.5 Goles", f"{p_over15*100:.1f}%")
+            g2.metric("Más de
