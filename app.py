@@ -647,32 +647,14 @@ def grupo(pos):
 # =========================================================
 st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>", unsafe_allow_html=True)
 
-# --- Nuevo selector de modo de predicción ---
-if "modo_prediccion" not in st.session_state:
-    st.session_state.modo_prediccion = "Combinada (Métrica + ML)"
-
-modo = st.sidebar.radio(
-    "📊 Modo de predicción",
-    ["Métrica únicamente", "ML únicamente", "Combinada (Métrica + ML)"],
-    index=2,  # Por defecto combinada
-    help="Métrica: solo reglas estadísticas. ML: solo modelos entrenados. Combinada: pesos dinámicos según jornada."
-)
-st.session_state.modo_prediccion = modo
-
-# Cargar modelos (se hace siempre)
 modelos_ml = cargar_modelos_ml()
 n_modelos = sum(len(v) for v in modelos_ml.values())
 hay_ml = n_modelos > 0
 
-# Mostrar en sidebar el estado del ML
 if hay_ml:
     st.sidebar.success(f"🤖 ML activo: {n_modelos} modelos cargados ({len(modelos_ml)} métricas)")
 else:
     st.sidebar.info("Sin modelos ML. Usando solo rama métrica.")
-    if modo == "ML únicamente":
-        st.sidebar.warning("⚠️ No hay modelos ML disponibles. Cambiando a modo Métrica.")
-        modo = "Métrica únicamente"
-        st.session_state.modo_prediccion = modo
 
 try:
     df_ligas = get_data_from_sheet("LIGAS")
@@ -725,6 +707,20 @@ try:
     visitantes_filtrados = [v for v in visitantes if clean(eq_l).upper() not in v.upper()]
     eq_v = cv.selectbox("🚀 Equipo Visitante", visitantes_filtrados, format_func=clean)
 
+    # --- SELECTOR DE MODO (DESPLEGABLE, justo antes del botón) ---
+    if "modo_prediccion" not in st.session_state:
+        st.session_state.modo_prediccion = "Combinada (Métrica + ML)"
+    
+    opciones_modo = ["Métrica únicamente", "ML únicamente", "Combinada (Métrica + ML)"]
+    modo = st.selectbox(
+        "📊 Modo de predicción",
+        opciones_modo,
+        index=2,  # Combinada por defecto
+        help="Métrica: solo reglas estadísticas. ML: solo modelos entrenados. Combinada: pesos dinámicos según jornada."
+    )
+    st.session_state.modo_prediccion = modo
+
+    # Botón de análisis
     if st.button("📊 GENERAR ANÁLISIS"):
         st.divider()
         try:
@@ -784,7 +780,7 @@ try:
             grupo_local_rival = grupo(pos_visit)
             grupo_visit_rival = grupo(pos_local)
 
-            # Calcular bloques (rama métrica) - SIEMPRE
+            # Calcular bloques (rama métrica)
             bloques = []
             for b in [1, 2, 3, 4, 5]:
                 dfL_b = filtrar_bloque(df_local, b, grupo_local_rival if b == 5 else None)
@@ -794,14 +790,14 @@ try:
             b1, b2, b3, b4, b5 = bloques
             metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
 
-            # Calcular predicciones ML - SIEMPRE (si hay modelos)
+            # Calcular predicciones ML (si hay modelos)
             pred_ml = None
             if hay_ml:
                 feats_local = construir_features_ml(df_local, df_visit, True, jor_sel, pos_local, pos_visit)
                 feats_visit = construir_features_ml(df_visit, df_local, False, jor_sel, pos_visit, pos_local)
                 pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
 
-            # --- Aplicar modo seleccionado ---
+            # Aplicar modo seleccionado
             modo_actual = st.session_state.modo_prediccion
             st.info(f"📌 Modo activo: **{modo_actual}**")
 
@@ -811,9 +807,8 @@ try:
 
             elif modo_actual == "ML únicamente":
                 if pred_ml is not None:
-                    # Convertir pred_ml al mismo formato que metricas_metrica
                     metricas_finales = {}
-                    # Mapeo de claves de pred_ml a claves de display
+                    # Mapear claves de pred_ml al formato de display
                     for key in metricas_metrica.keys():
                         base_key = key.replace("_local", "").replace("_visitante", "").replace("_partido", "")
                         if base_key == "goles":
@@ -826,7 +821,6 @@ try:
                             else:
                                 metricas_finales[key] = 0.0
                         else:
-                            # Para remates, paradas, corners, tarjetas
                             if key.endswith("_local") and f"{base_key}_local" in pred_ml:
                                 metricas_finales[key] = pred_ml[f"{base_key}_local"]
                             elif key.endswith("_visitante") and f"{base_key}_visitante" in pred_ml:
