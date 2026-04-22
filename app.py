@@ -17,6 +17,38 @@ client = gspread.authorize(creds)
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
 
 # =========================================================
+# AUTENTICACIÓN (original de tu app)
+# =========================================================
+def check_user(user_in, pass_in):
+    try:
+        sh = client.open_by_key(ID_CONTROL).worksheet("Sheet1")
+        data = sh.get_all_values()
+        for fila in data:
+            u_excel = str(fila[0]).strip()
+            p_excel = str(fila[1]).strip().replace(".0", "")
+            if u_excel == str(user_in).strip() and p_excel == str(pass_in).strip():
+                return True
+        return False
+    except:
+        return False
+
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+
+if not st.session_state['autenticado']:
+    st.markdown("<h2 style='text-align: center;'>🔐 Acceso al Sistema</h2>", unsafe_allow_html=True)
+    with st.form("login"):
+        u = st.text_input("Usuario:")
+        p = st.text_input("Contraseña:", type="password")
+        if st.form_submit_button("Entrar"):
+            if check_user(u, p):
+                st.session_state['autenticado'] = True
+                st.rerun()
+            else:
+                st.error("Datos incorrectos")
+    st.stop()
+
+# =========================================================
 # CARGA DE MODELOS ML
 # =========================================================
 PREFIJOS_METRICAS = {
@@ -100,7 +132,6 @@ def construir_features_ml(df_local, df_visit, es_local, jornada, pos_rival):
         df_hist = df_visit
     else:
         df_hist = pd.DataFrame()
-
     feats = {
         "ES_LOCAL": 1 if es_local else 0,
         "JORNADA": jornada,
@@ -138,7 +169,6 @@ def predecir_ml(modelos_ml, feats_local, feats_visit):
                 continue
         if predicciones:
             resultados[metrica] = float(np.mean(predicciones))
-
     pares = [
         ("goles_local", "goles_visitante", "goles_partido"),
         ("remates_totales", "remates_totales", "remates_totales_partido"),
@@ -168,7 +198,6 @@ def calcular_probabilidades_poisson(media_local, media_visitante):
     prob_btts = 0
     prob_over15 = 0
     prob_over25 = 0
-
     for i in range(max_goles):
         for j in range(max_goles):
             prob = poisson_prob(media_local, i) * poisson_prob(media_visitante, j)
@@ -178,14 +207,12 @@ def calcular_probabilidades_poisson(media_local, media_visitante):
                 p_empate += prob
             else:
                 p_visitante += prob
-
             if i > 0 and j > 0:
                 prob_btts += prob
             if (i + j) > 1.5:
                 prob_over15 += prob
             if (i + j) > 2.5:
                 prob_over25 += prob
-
     return {
         "1": p_local,
         "X": p_empate,
@@ -210,31 +237,8 @@ def obtener_historico_equipo(df, equipo):
         return pd.DataFrame()
     return df[(df['LOCAL'] == equipo) | (df['VISITANTE'] == equipo)].copy()
 
-def verificar_usuario(email):
-    df_users = get_data_from_sheet("USUARIOS")
-    if df_users.empty:
-        return False
-    return email.lower() in [str(x).lower() for x in df_users['EMAIL'].tolist()]
-
 # =========================================================
-# INICIALIZACIÓN DE ESTADO Y AUTENTICACIÓN
-# =========================================================
-if 'autenticado' not in st.session_state:
-    st.session_state['autenticado'] = False
-
-if not st.session_state['autenticado']:
-    st.title("🔐 Acceso Analizador PRO")
-    email_input = st.text_input("Introduce tu email para acceder:")
-    if st.button("Entrar"):
-        if verificar_usuario(email_input):
-            st.session_state['autenticado'] = True
-            st.rerun()
-        else:
-            st.error("Email no autorizado. Contacta con el administrador.")
-    st.stop()
-
-# =========================================================
-# CARGA DE DATOS Y MODELOS (una vez autenticado)
+# CARGA DE DATOS Y MODELOS (post login)
 # =========================================================
 with st.spinner("Cargando cerebro del sistema..."):
     modelos_ml = cargar_modelos_ml()
@@ -249,11 +253,22 @@ st.sidebar.success("Conexión establecida y Modelos cargados")
 st.title("⚽ Analizador de Partidos PRO")
 
 if not df_ligas.empty:
-    ligas_disponibles = df_ligas['LIGA'].unique().tolist()
+    # Ajuste: si la columna se llama 'Nombre de la liga' o 'LIGA'
+    if 'LIGA' in df_ligas.columns:
+        ligas_disponibles = df_ligas['LIGA'].unique().tolist()
+        col_equipo = 'EQUIPO'
+    elif 'Nombre de la liga' in df_ligas.columns:
+        ligas_disponibles = df_ligas['Nombre de la liga'].unique().tolist()
+        col_equipo = 'Equipo'  # según tu estructura
+    else:
+        st.error("Formato de hoja LIGAS no reconocido")
+        st.stop()
+    
     liga_seleccionada = st.selectbox("Selecciona la Liga:", ligas_disponibles)
-
-    equipos_liga = df_ligas[df_ligas['LIGA'] == liga_seleccionada]['EQUIPO'].unique().tolist()
-
+    
+    # Filtrar equipos
+    equipos_liga = df_ligas[df_ligas.iloc[:, 0] == liga_seleccionada][col_equipo].unique().tolist()
+    
     col1, col2 = st.columns(2)
     with col1:
         local = st.selectbox("Equipo Local:", ["Seleccionar..."] + equipos_liga)
@@ -270,16 +285,11 @@ if not df_ligas.empty:
         else:
             hist_local = obtener_historico_equipo(df_datos, local)
             hist_visit = obtener_historico_equipo(df_datos, visitante)
-
-            # Rama Matemática: media de goles (últimos 5 partidos)
             media_g_local = calcular_ma(hist_local, "GOL FAVOR", 5)
             media_g_visitante = calcular_ma(hist_visit, "GOL FAVOR", 5)
-
-            # Rama ML
             f_loc = construir_features_ml(hist_local, pd.DataFrame(), True, jornada, pos_rival_local)
             f_vis = construir_features_ml(pd.DataFrame(), hist_visit, False, jornada, pos_rival_visit)
             preds_ml = predecir_ml(modelos_ml, f_loc, f_vis)
-
             st.session_state['resultados_analisis'] = {
                 "media_g_local": media_g_local,
                 "media_g_visitante": media_g_visitante,
@@ -297,8 +307,6 @@ if 'resultados_analisis' in st.session_state:
     res = st.session_state['resultados_analisis']
     preds_ml = res['preds_ml']
     j = res['jornada']
-
-    # Pesos según jornada (protocolo)
     if j <= 5:
         w_math, w_ml = 0.20, 0.80
     elif j <= 10:
@@ -311,31 +319,22 @@ if 'resultados_analisis' in st.session_state:
         w_math, w_ml = 0.60, 0.40
     else:
         w_math, w_ml = 0.65, 0.35
-
     st.divider()
     st.subheader(f"📊 Análisis: {res['local']} vs {res['visitante']}")
-
-    # Combinar goles finales
     if preds_ml:
         g_loc_final = (res['media_g_local'] * w_math) + (preds_ml.get('goles_local', 0) * w_ml)
         g_vis_final = (res['media_g_visitante'] * w_math) + (preds_ml.get('goles_visitante', 0) * w_ml)
     else:
         g_loc_final, g_vis_final = res['media_g_local'], res['media_g_visitante']
-
     probs = calcular_probabilidades_poisson(g_loc_final, g_vis_final)
-
-    # Mostrar probabilidades 1X2 y mercados de goles
     c1, c2, c3 = st.columns(3)
     c1.metric("Victoria Local (1)", f"{probs['1']:.1%}")
     c2.metric("Empate (X)", f"{probs['X']:.1%}")
     c3.metric("Victoria Visitante (2)", f"{probs['2']:.1%}")
-
     c4, c5, c6 = st.columns(3)
     c4.metric("Más de 1.5 Goles", f"{probs['OVER15']:.1%}")
     c5.metric("Más de 2.5 Goles", f"{probs['OVER25']:.1%}")
     c6.metric("Ambos Marcan (BTTS)", f"{probs['BTTS']:.1%}")
-
-    # Proyecciones detalladas
     st.write("### 📈 Proyecciones Detalladas (ML + Stats)")
     if preds_ml:
         metrics_data = {
