@@ -7,7 +7,6 @@ from math import exp, factorial
 import re
 import os
 import joblib
-from datetime import datetime
 import traceback
 
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
@@ -52,7 +51,6 @@ PREFIJOS_METRICAS = {
     "BTTS": "btts",
 }
 
-# Referencia de features (solo para casos sin feature_names_in_)
 FEATURES_MODELO_REFERENCIA = [
     "ES_LOCAL", "JORNADA", "DIF_POSICION",
     "GOLES_FAVOR_MA3", "GOLES_CONTRA_MA3", "REMATES_TOTALES_MA3",
@@ -129,12 +127,17 @@ def calcular_ma(df, col, ventana):
     valores = df[col].dropna().tolist()
     if not valores:
         return 0.0
+    # Si hay menos datos que la ventana, usamos los que hay
+    if len(valores) < ventana:
+        return float(np.mean(valores))
     return float(np.mean(valores[-ventana:]))
 
 def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, pos_rival):
     """
-    Construye features separadas para el equipo propio y el rival.
-    Filtra el histórico del propio equipo según ES_LOCAL con fallback robusto.
+    Construye features para el equipo propio y el rival.
+    Asume que df_propio ya proviene de la pestaña correspondiente (LOCAL o VISITANTE),
+    por lo que no intenta filtrar por una columna ES_LOCAL inexistente.
+    Mantiene la feature ES_LOCAL para los modelos (1 = local, 0 = visitante).
     """
     col_map = {
         "GOLES_FAVOR": "GOL FAVOR",
@@ -145,43 +148,27 @@ def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, po
         "CORNERS": "CORNERES FAVOR",
         "TARJETAS": "TARJETAS AMARILLAS FAVOR",
     }
-    
-    # --- FILTRADO SEGURO DE ES_LOCAL ---
-    if not df_propio.empty and "ES_LOCAL" in df_propio.columns:
-        df_temp = df_propio.copy()
-        df_temp["ES_LOCAL"] = pd.to_numeric(df_temp["ES_LOCAL"], errors="coerce")
-        target = 1 if es_local else 0
-        df_filtrado = df_temp[df_temp["ES_LOCAL"] == target]
-        if df_filtrado.empty:
-            st.warning(f"⚠️ ES_LOCAL vacío o mal mapeado para condición {'local' if es_local else 'visitante'} – usando histórico completo del equipo")
-            df_propio_filtrado = df_temp
-        else:
-            df_propio_filtrado = df_filtrado
-    else:
-        if not df_propio.empty:
-            st.warning("⚠️ Columna ES_LOCAL no disponible – usando histórico completo del equipo")
-            df_propio_filtrado = df_propio.copy()
-        else:
-            df_propio_filtrado = pd.DataFrame()
-    
+
+    # Usar el histórico tal cual (las pestañas ya separan LOCAL/VISITANTE)
+    df_propio_filtrado = df_propio.copy() if not df_propio.empty else pd.DataFrame()
     df_rival_filtrado = df_rival.copy() if not df_rival.empty else pd.DataFrame()
-    
+
     feats = {
         "ES_LOCAL": 1 if es_local else 0,
         "JORNADA": jornada,
-        "DIF_POSICION": pos_propia - pos_rival,
+        "DIF_POSICION": (pos_propia - pos_rival) if (pos_propia is not None and pos_rival is not None) else 0,
     }
-    
-    # Stats del propio equipo
+
+    # Estadísticas del propio equipo (medias móviles)
     for nombre_feat, col_sheet in col_map.items():
-        for ventana in [3, 5, 10]:
+        for ventana in (3, 5, 10):
             feats[f"{nombre_feat}_MA{ventana}"] = calcular_ma(df_propio_filtrado, col_sheet, ventana)
-    
-    # Stats del rival (sufijo _RIVAL)
+
+    # Estadísticas del rival (sufijo _RIVAL)
     for nombre_feat, col_sheet in col_map.items():
-        for ventana in [3, 5, 10]:
+        for ventana in (3, 5, 10):
             feats[f"{nombre_feat}_MA{ventana}_RIVAL"] = calcular_ma(df_rival_filtrado, col_sheet, ventana)
-    
+
     return feats
 
 def predecir_ml(modelos_ml, feats_local, feats_visit):
@@ -412,7 +399,7 @@ def obtener_equivalencia_nombre(nombre_app, df_equivalencias):
     return nombre_buscar
 
 # =========================================================
-# DETECCIÓN DE COLUMNAS (CORREGIDA Y ROBUSTA)
+# DETECCIÓN DE COLUMNAS (con patrones ampliados para remates a puerta)
 # =========================================================
 def detectar_columna(df, palabras_clave):
     for col in df.columns.tolist():
@@ -443,11 +430,14 @@ def mapear_columnas(df):
         ],
         "REMATES PUERTA FAVOR": [
             "remates puerta favor", "remates a puerta favor", "remates puerta f", "shots on target for",
-            "remates puerta local", "remates a puerta local", "shots on target local"
+            "remates puerta local", "remates a puerta local", "shots on target local",
+            "tiros a puerta local", "tiros a puerta favor", "shots on target", "tiros a puerta",
+            "remates a puerta", "remates al arco", "remates al arco local"
         ],
         "REMATES PUERTA CONTRA": [
             "remates puerta contra", "remates a puerta contra", "remates puerta c", "shots on target against",
-            "remates puerta visitante", "remates a puerta visitante", "shots on target visitante"
+            "remates puerta visitante", "remates a puerta visitante", "shots on target visitante",
+            "tiros a puerta visitante", "tiros a puerta contra", "remates a puerta visitante"
         ],
         "PARADAS FAVOR": [
             "paradas favor", "paradas f", "saves for", "paradas realizadas",
@@ -548,6 +538,7 @@ def filtrar_bloque(df, tipo, grupo=None):
     return df.copy()
 
 def limpiar_ruido(lista):
+    """Elimina valores extremos solo si hay suficientes datos."""
     lista = [x for x in lista if pd.notna(x)]
     if len(lista) < 5:
         return lista
@@ -686,7 +677,6 @@ try:
     id_actual = df_competiciones[df_competiciones['Nombre de la liga'] == liga_sel]['ID del libro'].values[0]
     jor_sel = col2.selectbox("📅 Jornada", list(range(1, 45)))
 
-    # Cachear lista de pestañas
     cache_key = f"pestanas_{id_actual}"
     if cache_key not in st.session_state:
         libro_temp = client.open_by_key(id_actual)
@@ -707,7 +697,7 @@ try:
     visitantes_filtrados = [v for v in visitantes if clean(eq_l).upper() not in v.upper()]
     eq_v = cv.selectbox("🚀 Equipo Visitante", visitantes_filtrados, format_func=clean)
 
-    # --- SELECTOR DE MODO (DESPLEGABLE, justo antes del botón) ---
+    # Selector de modo (desplegable)
     if "modo_prediccion" not in st.session_state:
         st.session_state.modo_prediccion = "Combinada (Métrica + ML)"
     
@@ -715,12 +705,11 @@ try:
     modo = st.selectbox(
         "📊 Modo de predicción",
         opciones_modo,
-        index=2,  # Combinada por defecto
+        index=2,
         help="Métrica: solo reglas estadísticas. ML: solo modelos entrenados. Combinada: pesos dinámicos según jornada."
     )
     st.session_state.modo_prediccion = modo
 
-    # Botón de análisis
     if st.button("📊 GENERAR ANÁLISIS"):
         st.divider()
         try:
@@ -736,6 +725,9 @@ try:
                 st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "Vacío")
                 st.write(f"**Filas LOCAL:** {len(df_local)}")
                 st.write(f"**Filas VISITANTE:** {len(df_visit)}")
+                # Mostrar mapeo aplicado (opcional)
+                if not df_local.empty and 'mapeo_aplicado' in locals():
+                    st.write("**Mapeo LOCAL:**", mapeo_aplicado)
 
             if df_local.empty or df_visit.empty:
                 st.error("No se pudieron cargar los datos de los equipos.")
@@ -780,7 +772,7 @@ try:
             grupo_local_rival = grupo(pos_visit)
             grupo_visit_rival = grupo(pos_local)
 
-            # Calcular bloques (rama métrica)
+            # Rama métrica
             bloques = []
             for b in [1, 2, 3, 4, 5]:
                 dfL_b = filtrar_bloque(df_local, b, grupo_local_rival if b == 5 else None)
@@ -790,25 +782,23 @@ try:
             b1, b2, b3, b4, b5 = bloques
             metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
 
-            # Calcular predicciones ML (si hay modelos)
+            # ML (si hay modelos)
             pred_ml = None
             if hay_ml:
                 feats_local = construir_features_ml(df_local, df_visit, True, jor_sel, pos_local, pos_visit)
                 feats_visit = construir_features_ml(df_visit, df_local, False, jor_sel, pos_visit, pos_local)
                 pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
 
-            # Aplicar modo seleccionado
+            # Aplicar modo
             modo_actual = st.session_state.modo_prediccion
             st.info(f"📌 Modo activo: **{modo_actual}**")
 
             if modo_actual == "Métrica únicamente":
                 metricas_finales = metricas_metrica
                 usado_ml = False
-
             elif modo_actual == "ML únicamente":
                 if pred_ml is not None:
                     metricas_finales = {}
-                    # Mapear claves de pred_ml al formato de display
                     for key in metricas_metrica.keys():
                         base_key = key.replace("_local", "").replace("_visitante", "").replace("_partido", "")
                         if base_key == "goles":
@@ -834,13 +824,12 @@ try:
                     st.warning("⚠️ No hay predicciones ML disponibles. Fallback a métrica únicamente.")
                     metricas_finales = metricas_metrica
                     usado_ml = False
-
             else:  # Combinada
                 metricas_finales, usado_ml = combinar_metrica_ml(metricas_metrica, pred_ml, jor_sel)
                 if not usado_ml:
                     st.info("ℹ️ No se pudo combinar con ML (quizás faltan predicciones). Mostrando solo métrica.")
 
-            # Asegurar métricas visitante (por si faltan)
+            # Asegurar métricas visitante
             for met in ["remates_totales", "remates_puerta", "paradas", "corners", "tarjetas"]:
                 key_vis = f"{met}_visitante"
                 if key_vis not in metricas_finales:
