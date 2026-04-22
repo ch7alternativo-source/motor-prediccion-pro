@@ -20,26 +20,26 @@ ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
 # CARGA DE MODELOS ML
 # =========================================================
 PREFIJOS_METRICAS = {
-    "GOLES_FAVOR":     "goles_local",
-    "GOLES_CONTRA":    "goles_visitante",
+    "GOLES_FAVOR": "goles_local",
+    "GOLES_CONTRA": "goles_visitante",
     "REMATES_TOTALES": "remates_totales",
-    "REMATES_PUERTA":  "remates_puerta",
-    "PARADAS":         "paradas",
-    "CORNERS":         "corners",
-    "TARJETAS":        "tarjetas",
-    "RESULTADO":       "resultado",
-    "OVER_1_5":        "over_1_5",
-    "OVER_2_5":        "over_2_5",
-    "BTTS":            "btts",
+    "REMATES_PUERTA": "remates_puerta",
+    "PARADAS": "paradas",
+    "CORNERS": "corners",
+    "TARJETAS": "tarjetas",
+    "RESULTADO": "resultado",
+    "OVER_1_5": "over_1_5",
+    "OVER_2_5": "over_2_5",
+    "BTTS": "btts",
 }
 
 FEATURES_MODELO = [
     "ES_LOCAL", "JORNADA", "POSICION_RIVAL",
-    "GOLES_FAVOR_MA3",    "GOLES_CONTRA_MA3",    "REMATES_TOTALES_MA3",
-    "REMATES_PUERTA_MA3",  "PARADAS_MA3",  "CORNERS_MA3",  "TARJETAS_MA3",
-    "GOLES_FAVOR_MA5",    "GOLES_CONTRA_MA5",    "REMATES_TOTALES_MA5",
-    "REMATES_PUERTA_MA5",  "PARADAS_MA5",  "CORNERS_MA5",  "TARJETAS_MA5",
-    "GOLES_FAVOR_MA10",   "GOLES_CONTRA_MA10",   "REMATES_TOTALES_MA10",
+    "GOLES_FAVOR_MA3", "GOLES_CONTRA_MA3", "REMATES_TOTALES_MA3",
+    "REMATES_PUERTA_MA3", "PARADAS_MA3", "CORNERS_MA3", "TARJETAS_MA3",
+    "GOLES_FAVOR_MA5", "GOLES_CONTRA_MA5", "REMATES_TOTALES_MA5",
+    "REMATES_PUERTA_MA5", "PARADAS_MA5", "CORNERS_MA5", "TARJETAS_MA5",
+    "GOLES_FAVOR_MA10", "GOLES_CONTRA_MA10", "REMATES_TOTALES_MA10",
     "REMATES_PUERTA_MA10", "PARADAS_MA10", "CORNERS_MA10", "TARJETAS_MA10",
 ]
 
@@ -47,19 +47,14 @@ FEATURES_MODELO = [
 def cargar_modelos_ml():
     modelos = {}
     carpeta = "models"
- 
     if not os.path.exists(carpeta):
         return modelos
- 
     archivos = [f for f in os.listdir(carpeta) if f.endswith(".pkl")]
- 
     for archivo in archivos:
         ruta = os.path.join(carpeta, archivo)
         nombre = archivo.replace(".pkl", "")
- 
         try:
             obj = joblib.load(ruta)
- 
             if isinstance(obj, dict):
                 for clave, valor in obj.items():
                     metrica_interna = PREFIJOS_METRICAS.get(clave.upper())
@@ -93,7 +88,6 @@ def cargar_modelos_ml():
                     pass
         except Exception:
             pass
- 
     return modelos
 
 def calcular_ma(df, col, ventana):
@@ -106,15 +100,14 @@ def calcular_ma(df, col, ventana):
 
 def construir_features_ml(df_local, df_visit, es_local, jornada, pos_rival):
     col_map = {
-        "GOLES_FAVOR":     "GOL FAVOR",
-        "GOLES_CONTRA":    "GOL CONTRA",
+        "GOLES_FAVOR": "GOL FAVOR",
+        "GOLES_CONTRA": "GOL CONTRA",
         "REMATES_TOTALES": "REMATES TOTALES FAVOR",
-        "REMATES_PUERTA":  "REMATES PUERTA FAVOR",
-        "PARADAS":         "PARADAS FAVOR",
-        "CORNERS":         "CORNERES FAVOR",
-        "TARJETAS":        "TARJETAS AMARILLAS FAVOR",
+        "REMATES_PUERTA": "REMATES PUERTA FAVOR",
+        "PARADAS": "PARADAS FAVOR",
+        "CORNERS": "CORNERES FAVOR",
+        "TARJETAS": "TARJETAS AMARILLAS FAVOR",
     }
- 
     if not df_local.empty and not df_visit.empty:
         df_hist = (pd.concat([df_local, df_visit]).sort_values("FECHA")
                    if "FECHA" in df_local.columns
@@ -125,38 +118,30 @@ def construir_features_ml(df_local, df_visit, es_local, jornada, pos_rival):
         df_hist = df_visit
     else:
         df_hist = pd.DataFrame()
- 
     feats = {
-        "ES_LOCAL":       1 if es_local else 0,
-        "JORNADA":        jornada,
+        "ES_LOCAL": 1 if es_local else 0,
+        "JORNADA": jornada,
         "POSICION_RIVAL": pos_rival if pos_rival else 10,
     }
- 
     for nombre_feat, col_sheet in col_map.items():
         for ventana in [3, 5, 10]:
             feats[f"{nombre_feat}_MA{ventana}"] = calcular_ma(df_hist, col_sheet, ventana)
- 
     return feats
 
 def predecir_ml(modelos_ml, feats_local, feats_visit):
     if not modelos_ml:
         return None
- 
     resultados = {}
- 
     metricas_local = {
-        "goles_local":     feats_local,
+        "goles_local": feats_local,
         "remates_totales": feats_local,
-        "remates_puerta":  feats_local,
-        "paradas":         feats_local,
-        "corners":         feats_local,
-        "tarjetas":        feats_local,
+        "remates_puerta": feats_local,
+        "paradas": feats_local,
+        "corners": feats_local,
+        "tarjetas": feats_local,
     }
-    metricas_visit = {
-        "goles_visitante": feats_visit,
-    }
+    metricas_visit = {"goles_visitante": feats_visit}
     todas = {**metricas_local, **metricas_visit}
- 
     for metrica, feats in todas.items():
         lista_modelos = modelos_ml.get(metrica, [])
         if not lista_modelos:
@@ -171,51 +156,50 @@ def predecir_ml(modelos_ml, feats_local, feats_visit):
                 continue
         if predicciones:
             resultados[metrica] = float(np.mean(predicciones))
- 
     pares = [
-        ("goles_local",    "goles_visitante", "goles_partido"),
-        ("remates_totales","remates_totales", "remates_totales_partido"),
-        ("remates_puerta", "remates_puerta",  "remates_puerta_partido"),
-        ("paradas",        "paradas",         "paradas_partido"),
-        ("corners",        "corners",         "corners_partido"),
-        ("tarjetas",       "tarjetas",        "tarjetas_partido"),
+        ("goles_local", "goles_visitante", "goles_partido"),
+        ("remates_totales", "remates_totales", "remates_totales_partido"),
+        ("remates_puerta", "remates_puerta", "remates_puerta_partido"),
+        ("paradas", "paradas", "paradas_partido"),
+        ("corners", "corners", "corners_partido"),
+        ("tarjetas", "tarjetas", "tarjetas_partido"),
     ]
- 
     for k_loc, k_vis, k_partido in pares:
         v_loc = resultados.get(k_loc)
         v_vis = resultados.get(k_vis) if k_loc != k_vis else resultados.get("goles_visitante")
         if v_loc is not None and v_vis is not None:
             resultados[k_partido] = v_loc + v_vis
- 
     return resultados if resultados else None
 
 def combinar_metrica_ml(metricas_metrica, pred_ml, jornada):
     if pred_ml is None:
         return metricas_metrica, False
- 
-    if jornada <= 5:    w_met, w_ml = 0.8, 0.2
-    elif jornada <= 10: w_met, w_ml = 0.7, 0.3
-    elif jornada <= 20: w_met, w_ml = 0.6, 0.4
-    elif jornada <= 30: w_met, w_ml = 0.5, 0.5
-    else:               w_met, w_ml = 0.4, 0.6
- 
+    if jornada <= 5:
+        w_met, w_ml = 0.8, 0.2
+    elif jornada <= 10:
+        w_met, w_ml = 0.7, 0.3
+    elif jornada <= 20:
+        w_met, w_ml = 0.6, 0.4
+    elif jornada <= 30:
+        w_met, w_ml = 0.5, 0.5
+    else:
+        w_met, w_ml = 0.4, 0.6
     final = {}
     clave_map = {
-        "goles_local":             "goles_local",
-        "goles_visitante":         "goles_visitante",
-        "goles_partido":           "goles_partido",
-        "remates_totales":         "remates_totales_local",
+        "goles_local": "goles_local",
+        "goles_visitante": "goles_visitante",
+        "goles_partido": "goles_partido",
+        "remates_totales": "remates_totales_local",
         "remates_totales_partido": "remates_totales_partido",
-        "remates_puerta":          "remates_puerta_local",
-        "remates_puerta_partido":  "remates_puerta_partido",
-        "paradas":                 "paradas_local",
-        "paradas_partido":         "paradas_partido",
-        "corners":                 "corners_local",
-        "corners_partido":         "corners_partido",
-        "tarjetas":                "tarjetas_local",
-        "tarjetas_partido":        "tarjetas_partido",
+        "remates_puerta": "remates_puerta_local",
+        "remates_puerta_partido": "remates_puerta_partido",
+        "paradas": "paradas_local",
+        "paradas_partido": "paradas_partido",
+        "corners": "corners_local",
+        "corners_partido": "corners_partido",
+        "tarjetas": "tarjetas_local",
+        "tarjetas_partido": "tarjetas_partido",
     }
- 
     for k_met, v_met in metricas_metrica.items():
         ml_val = None
         for k_ml, k_met2 in clave_map.items():
@@ -226,7 +210,6 @@ def combinar_metrica_ml(metricas_metrica, pred_ml, jornada):
             final[k_met] = w_met * v_met + w_ml * ml_val
         else:
             final[k_met] = v_met
- 
     return final, True
 
 def check_user(user_in, pass_in):
@@ -328,22 +311,22 @@ def detectar_columna(df, palabras_clave):
 def mapear_columnas(df):
     mapeo = {}
     columnas_buscar = {
-        "GOL FAVOR":                 ["gol favor", "goles favor", "gf", "goles_marcados"],
-        "GOL CONTRA":                ["gol contra", "goles contra", "gc", "goles_recibidos"],
-        "REMATES TOTALES FAVOR":     ["remates totales favor", "remates totales f", "total shots for", "remates favor"],
-        "REMATES TOTALES CONTRA":    ["remates totales contra", "remates totales c", "total shots against", "remates contra"],
-        "REMATES PUERTA FAVOR":      ["remates puerta favor", "remates a puerta favor", "remates puerta f", "shots on target for"],
-        "REMATES PUERTA CONTRA":     ["remates puerta contra", "remates a puerta contra", "remates puerta c", "shots on target against"],
-        "PARADAS FAVOR":             ["paradas favor", "paradas f", "saves for", "paradas realizadas"],
-        "PARADAS CONTRA":            ["paradas contra", "paradas c", "saves against"],
-        "CORNERES FAVOR":            ["corneres favor", "corners favor", "corner favor"],
-        "CORNERES CONTRA":           ["corneres contra", "corners contra", "corner contra"],
-        "TARJETAS AMARILLAS FAVOR":  ["tarjetas amarillas favor", "amarillas favor", "yellow cards for"],
+        "GOL FAVOR": ["gol favor", "goles favor", "gf", "goles_marcados"],
+        "GOL CONTRA": ["gol contra", "goles contra", "gc", "goles_recibidos"],
+        "REMATES TOTALES FAVOR": ["remates totales favor", "remates totales f", "total shots for", "remates favor"],
+        "REMATES TOTALES CONTRA": ["remates totales contra", "remates totales c", "total shots against", "remates contra"],
+        "REMATES PUERTA FAVOR": ["remates puerta favor", "remates a puerta favor", "remates puerta f", "shots on target for"],
+        "REMATES PUERTA CONTRA": ["remates puerta contra", "remates a puerta contra", "remates puerta c", "shots on target against"],
+        "PARADAS FAVOR": ["paradas favor", "paradas f", "saves for", "paradas realizadas"],
+        "PARADAS CONTRA": ["paradas contra", "paradas c", "saves against"],
+        "CORNERES FAVOR": ["corneres favor", "corners favor", "corner favor"],
+        "CORNERES CONTRA": ["corneres contra", "corners contra", "corner contra"],
+        "TARJETAS AMARILLAS FAVOR": ["tarjetas amarillas favor", "amarillas favor", "yellow cards for"],
         "TARJETAS AMARILLAS CONTRA": ["tarjetas amarillas contra", "amarillas contra", "yellow cards against"],
-        "JORNADA":                   ["jornada", "jor", "round", "matchday"],
-        "RIVAL":                     ["rival", "oponente", "equipo rival", "opponent"],
-        "POSICION RIVAL":            ["posicion rival", "posicion rival", "pos rival"],
-        "FECHA":                     ["fecha", "date", "fecha partido"],
+        "JORNADA": ["jornada", "jor", "round", "matchday"],
+        "RIVAL": ["rival", "oponente", "equipo rival", "opponent"],
+        "POSICION RIVAL": ["posicion rival", "posición rival", "pos rival"],
+        "FECHA": ["fecha", "date", "fecha partido"],
     }
     for nombre_estandar, patrones in columnas_buscar.items():
         col_encontrada = detectar_columna(df, patrones)
@@ -419,12 +402,12 @@ def limpiar_ruido(lista):
 def calcular_metricas(dfL, dfV, jornada):
     metricas = {}
     columnas_def = [
-        ("GOL FAVOR",                "GOL CONTRA",               "goles"),
-        ("REMATES TOTALES FAVOR",    "REMATES TOTALES CONTRA",   "remates_totales"),
-        ("REMATES PUERTA FAVOR",     "REMATES PUERTA CONTRA",    "remates_puerta"),
-        ("PARADAS FAVOR",            "PARADAS CONTRA",           "paradas"),
-        ("CORNERES FAVOR",           "CORNERES CONTRA",          "corners"),
-        ("TARJETAS AMARILLAS CONTRA","TARJETAS AMARILLAS FAVOR", "tarjetas"),
+        ("GOL FAVOR", "GOL CONTRA", "goles"),
+        ("REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA", "remates_totales"),
+        ("REMATES PUERTA FAVOR", "REMATES PUERTA CONTRA", "remates_puerta"),
+        ("PARADAS FAVOR", "PARADAS CONTRA", "paradas"),
+        ("CORNERES FAVOR", "CORNERES CONTRA", "corners"),
+        ("TARJETAS AMARILLAS CONTRA", "TARJETAS AMARILLAS FAVOR", "tarjetas"),
     ]
     for colF, colC, nombre in columnas_def:
         tieneF_L = colF in dfL.columns
@@ -443,14 +426,12 @@ def calcular_metricas(dfL, dfV, jornada):
                 lista_L_fav = limpiar_ruido(lista_L_fav)
                 lista_V_contra = limpiar_ruido(lista_V_contra)
             m_local = (np.mean(lista_L_fav) + np.mean(lista_V_contra)) / 2 if lista_L_fav and lista_V_contra else 0
-
             lista_V_fav = dfV[colF].dropna().tolist()
             lista_L_contra = dfL[colC].dropna().tolist()
             if jornada >= 14:
                 lista_V_fav = limpiar_ruido(lista_V_fav)
                 lista_L_contra = limpiar_ruido(lista_L_contra)
             m_visit = (np.mean(lista_V_fav) + np.mean(lista_L_contra)) / 2 if lista_V_fav and lista_L_contra else 0
-
             metricas[nombre + "_local"] = m_local
             metricas[nombre + "_visitante"] = m_visit
             metricas[nombre + "_partido"] = m_local + m_visit
@@ -481,9 +462,12 @@ def prob_1x2(gL, gV):
         for j in range(max_g + 1):
             try:
                 p = poisson(gL, i) * poisson(gV, j)
-                if i > j:  pL += p
-                elif i == j: pE += p
-                else:        pV += p
+                if i > j:
+                    pL += p
+                elif i == j:
+                    pE += p
+                else:
+                    pV += p
             except:
                 continue
     total = pL + pE + pV
@@ -494,15 +478,17 @@ def prob_1x2(gL, gV):
     return pL, pE, pV
 
 def grupo(pos):
-    if 1 <= pos <= 4:  return [1, 2, 3, 4]
-    if 5 <= pos <= 10: return [5, 6, 7, 8, 9, 10]
-    if 11 <= pos <= 16: return [11, 12, 13, 14, 15, 16]
+    if 1 <= pos <= 4:
+        return [1, 2, 3, 4]
+    if 5 <= pos <= 10:
+        return [5, 6, 7, 8, 9, 10]
+    if 11 <= pos <= 16:
+        return [11, 12, 13, 14, 15, 16]
     return list(range(17, 26))
 
 # =========================================================
 # AUTENTICACION
 # =========================================================
-
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
@@ -522,7 +508,6 @@ if not st.session_state['autenticado']:
 # =========================================================
 # INTERFAZ PRINCIPAL
 # =========================================================
-
 st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>", unsafe_allow_html=True)
 
 modelos_ml = cargar_modelos_ml()
@@ -539,7 +524,7 @@ try:
     with st.expander("🔧 DIAGNOSTICO - Hoja LIGAS"):
         st.dataframe(df_ligas)
 
-    mask_historico = df_ligas['Nombre de la liga'].str.upper().str.contains('HISTORICO|HISTORICO', na=False)
+    mask_historico = df_ligas['Nombre de la liga'].str.upper().str.contains('HISTORICO|HISTÓRICO', na=False)
     df_historico = df_ligas[mask_historico]
     df_competiciones = df_ligas[~mask_historico]
 
@@ -664,13 +649,26 @@ try:
             feats_visit = construir_features_ml(pd.DataFrame(), df_visit, False, jor_sel, pos_local)
             pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
 
-            # -- Combinacion final --
             metricas_finales, usado_ml = combinar_metrica_ml(metricas_metrica, pred_ml, jor_sel)
 
             if usado_ml:
                 st.info(f"🤖 ML activo — combinando {n_modelos} modelos con rama metrica (jornada {jor_sel})")
             else:
                 st.info("📐 Solo rama metrica (no hay modelos ML disponibles)")
+
+            # Asegurar que existan las métricas visitante si no están
+            for met in ["remates_totales", "remates_puerta", "paradas", "corners", "tarjetas"]:
+                key_local = f"{met}_local"
+                key_vis = f"{met}_visitante"
+                key_total = f"{met}_partido"
+                if key_vis not in metricas_finales:
+                    local_val = metricas_finales.get(key_local, 0)
+                    total_val = metricas_finales.get(key_total, 0)
+                    metricas_finales[key_vis] = max(total_val - local_val, 0)
+            if "goles_visitante" not in metricas_finales:
+                metricas_finales["goles_visitante"] = max(
+                    metricas_finales.get("goles_partido", 0) - metricas_finales.get("goles_local", 0), 0
+                )
 
             gL = metricas_finales.get("goles_local", 0)
             gV = metricas_finales.get("goles_visitante", 0)
@@ -688,4 +686,46 @@ try:
             total_goles = gL + gV
             p_over15 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1))
             p_over25 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1) + poisson(total_goles, 2))
-            p_btts = (1 - poisson(gL, 0)) * (1
+            p_btts = (1 - poisson(gL, 0)) * (1 - poisson(gV, 0))
+
+            g1, g2, g3 = st.columns(3)
+            g1.metric("Mas de 1.5 Goles", f"{p_over15*100:.1f}%")
+            g2.metric("Mas de 2.5 Goles", f"{p_over25*100:.1f}%")
+            g3.metric("Ambos Marcan", f"{p_btts*100:.1f}%")
+
+            st.markdown("### 📈 PREDICCION DE ESTADISTICAS")
+            tabla = pd.DataFrame({
+                "Metrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Corners", "Tarjetas"],
+                "Local": [
+                    f"{metricas_finales.get('goles_local', 0):.1f}",
+                    f"{metricas_finales.get('remates_totales_local', 0):.1f}",
+                    f"{metricas_finales.get('remates_puerta_local', 0):.1f}",
+                    f"{metricas_finales.get('paradas_local', 0):.1f}",
+                    f"{metricas_finales.get('corners_local', 0):.1f}",
+                    f"{metricas_finales.get('tarjetas_local', 0):.1f}",
+                ],
+                "Visitante": [
+                    f"{metricas_finales.get('goles_visitante', 0):.1f}",
+                    f"{metricas_finales.get('remates_totales_visitante', 0):.1f}",
+                    f"{metricas_finales.get('remates_puerta_visitante', 0):.1f}",
+                    f"{metricas_finales.get('paradas_visitante', 0):.1f}",
+                    f"{metricas_finales.get('corners_visitante', 0):.1f}",
+                    f"{metricas_finales.get('tarjetas_visitante', 0):.1f}",
+                ],
+                "Total": [
+                    f"{metricas_finales.get('goles_partido', 0):.1f}",
+                    f"{metricas_finales.get('remates_totales_partido', 0):.1f}",
+                    f"{metricas_finales.get('remates_puerta_partido', 0):.1f}",
+                    f"{metricas_finales.get('paradas_partido', 0):.1f}",
+                    f"{metricas_finales.get('corners_partido', 0):.1f}",
+                    f"{metricas_finales.get('tarjetas_partido', 0):.1f}",
+                ],
+            })
+            st.dataframe(tabla, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Error en el analisis: {e}")
+            st.info("Revisa el panel de diagnostico para ver las columnas disponibles.")
+
+except Exception as e:
+    st.error(f"Error general: {e}")
