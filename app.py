@@ -132,7 +132,10 @@ def construir_features_ml(df_local, df_visit, es_local, jornada, pos_rival):
     }
     
     if not df_local.empty and not df_visit.empty:
-        df_hist = pd.concat([df_local, df_visit]).sort_values("FECHA") if "FECHA" in df_local.columns else pd.concat([df_local, df_visit])
+        if "FECHA" in df_local.columns:
+            df_hist = pd.concat([df_local, df_visit]).sort_values("FECHA")
+        else:
+            df_hist = pd.concat([df_local, df_visit])
     elif not df_local.empty:
         df_hist = df_local
     elif not df_visit.empty:
@@ -140,7 +143,11 @@ def construir_features_ml(df_local, df_visit, es_local, jornada, pos_rival):
     else:
         df_hist = pd.DataFrame()
     
-    feats = {"ES_LOCAL": 1 if es_local else 0, "JORNADA": jornada, "POSICION_RIVAL": pos_rival if pos_rival else 10}
+    feats = {
+        "ES_LOCAL": 1 if es_local else 0,
+        "JORNADA": jornada,
+        "POSICION_RIVAL": pos_rival if pos_rival else 10
+    }
     
     for nombre_feat, col_sheet in col_map.items():
         for ventana in [3, 5, 10]:
@@ -355,6 +362,7 @@ def mapear_columnas(df):
         "JORNADA": ["jornada", "jor", "round", "matchday"],
         "RIVAL": ["rival", "oponente", "opponent"],
         "FECHA": ["fecha", "date", "fecha partido"],
+        "POSICION RIVAL": ["posicion rival", "posición rival", "pos rival"]
     }
     for nombre_estandar, patrones in columnas_buscar.items():
         col_encontrada = detectar_columna(df, patrones)
@@ -373,7 +381,7 @@ def normalizar_y_validar(df):
         "GOL FAVOR", "GOL CONTRA", "REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA",
         "REMATES PUERTA FAVOR", "REMATES PUERTA CONTRA", "PARADAS FAVOR", "PARADAS CONTRA",
         "CORNERES FAVOR", "CORNERES CONTRA", "TARJETAS AMARILLAS FAVOR", "TARJETAS AMARILLAS CONTRA",
-        "JORNADA"
+        "JORNADA", "POSICION RIVAL"
     ]
     for col in columnas_numericas:
         if col in df.columns:
@@ -386,6 +394,8 @@ def normalizar_y_validar(df):
     if "JORNADA" in df.columns:
         df = df.dropna(subset=["JORNADA"])
         df["JORNADA"] = df["JORNADA"].astype(int)
+    if "POSICION RIVAL" in df.columns:
+        df["POSICION RIVAL"] = df["POSICION RIVAL"].astype(float).astype(int)
     return df
 
 def cargar_pestana_equipo(ws):
@@ -605,6 +615,8 @@ try:
             with st.expander("🔧 Diagnóstico - Columnas encontradas"):
                 st.write("**Columnas LOCAL:**", list(df_local.columns) if not df_local.empty else "Vacío")
                 st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "Vacío")
+                st.write(f"**Filas LOCAL:** {len(df_local)}")
+                st.write(f"**Filas VISITANTE:** {len(df_visit)}")
             
             if df_local.empty or df_visit.empty:
                 st.error("❌ No se pudieron cargar los datos de los equipos.")
@@ -682,10 +694,4 @@ try:
             
             st.markdown("### 🔥 MERCADOS DE GOLES")
             total_goles = gL + gV
-            p_over15 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1))
-            p_over25 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1) + poisson(total_goles, 2))
-            p_btts = (1 - poisson(gL, 0)) * (1 - poisson(gV, 0))
-            
-            g1, g2, g3 = st.columns(3)
-            g1.metric("Más de 1.5 Goles", f"{p_over15*100:.1f}%")
-            g2.metric("Más de
+            p_over15 = 1 - (poisson(total_goles, 0) + poisson(total
