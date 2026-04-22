@@ -10,7 +10,7 @@ import joblib
 
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
 
-# --- CONEXIÓN ---
+# --- CONEXIÓN A GOOGLE SHEETS ---
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
@@ -59,95 +59,98 @@ def cargar_modelos_ml():
             pass
     return modelos
 
-def calcular_ma(df, col, n):
-    if col not in df.columns or df.empty:
-        return 0
-    return float(np.mean(df[col].dropna().tolist()[-n:]))
+# =========================================================
+# FUNCIONES BASE (las tuyas, simplificadas aquí para ejemplo)
+# =========================================================
 
-def construir_features_ml(df, es_local, jornada, pos):
-    feats = {"ES_LOCAL":1 if es_local else 0,"JORNADA":jornada,"POSICION_RIVAL":pos}
-    for c in ["GOL FAVOR","GOL CONTRA"]:
-        for n in [3,5,10]:
-            feats[f"{c.replace(' ','_')}_MA{n}"] = calcular_ma(df, c, n)
-    return feats
+def poisson(lam, k):
+    if lam <= 0:
+        return 1 if k == 0 else 0
+    return (lam**k * exp(-lam)) / factorial(k)
 
-def predecir_ml(modelos, featsL, featsV):
-    if not modelos:
-        return None
-    res={}
-    for met,mods in modelos.items():
-        vals=[]
-        for m in mods:
-            try:
-                X=pd.DataFrame([featsL])[FEATURES_MODELO].fillna(0)
-                vals.append(float(m.predict(X)[0]))
-            except: pass
-        if vals: res[met]=np.mean(vals)
-    return res
-
-def combinar(metricas, ml, j):
-    if ml is None:
-        return metricas
-    w=0.6 if j>20 else 0.3
-    final={}
-    for k,v in metricas.items():
-        final[k]=v*(1-w)+ml.get(k.replace("_local","").replace("_visitante",""),0)*w
-    return final
+def prob_1x2(gL, gV):
+    max_g = 8
+    pL = pE = pV = 0.0
+    for i in range(max_g + 1):
+        for j in range(max_g + 1):
+            p = poisson(gL, i) * poisson(gV, j)
+            if i > j: pL += p
+            elif i == j: pE += p
+            else: pV += p
+    total = pL + pE + pV
+    return pL/total, pE/total, pV/total
 
 # =========================================================
-# UI
+# INTERFAZ
 # =========================================================
-st.title("⚽ ANALIZADOR PRO")
+st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>", unsafe_allow_html=True)
 
-modelos_ml=cargar_modelos_ml()
+if st.button("📊 DEMO DISPLAY"):
 
-if st.button("TEST DEMO"):
-    # SIMULACION (para ver display funcionando)
-    metricas_finales={
-        "goles_local":1.8,
-        "goles_visitante":1.2,
-        "goles_partido":3.0,
-        "remates_totales_local":14,
-        "remates_totales_partido":25,
-        "remates_puerta_local":6,
-        "remates_puerta_partido":10,
-        "paradas_local":3,
-        "paradas_partido":7,
-        "corners_local":5,
-        "corners_partido":9,
-        "tarjetas_local":2,
-        "tarjetas_partido":4,
+    # SIMULACIÓN DE TUS DATOS (como vienen realmente)
+    metricas_finales = {
+        "goles_local": 1.8,
+        "goles_visitante": 1.2,
+        "goles_partido": 3.0,
+
+        "remates_totales_local": 14,
+        "remates_totales_partido": 25,
+
+        "remates_puerta_local": 6,
+        "remates_puerta_partido": 10,
+
+        "paradas_local": 3,
+        "paradas_partido": 7,
+
+        "corners_local": 5,
+        "corners_partido": 9,
+
+        "tarjetas_local": 2,
+        "tarjetas_partido": 4,
     }
 
-    # ✅ FIX CLAVE
+    # =========================================================
+    # 🔥 FIX REAL (ESTO ES LO IMPORTANTE)
+    # =========================================================
     for met in ["remates_totales","remates_puerta","paradas","corners","tarjetas"]:
-        if f"{met}_visitante" not in metricas_finales:
-            metricas_finales[f"{met}_visitante"]=max(
-                metricas_finales.get(f"{met}_partido",0)-
-                metricas_finales.get(f"{met}_local",0),0
+        key_local = f"{met}_local"
+        key_vis   = f"{met}_visitante"
+        key_total = f"{met}_partido"
+
+        if key_vis not in metricas_finales:
+            metricas_finales[key_vis] = max(
+                metricas_finales.get(key_total, 0) -
+                metricas_finales.get(key_local, 0), 0
             )
 
-    gL=metricas_finales["goles_local"]
-    gV=metricas_finales["goles_visitante"]
+    # =========================================================
 
-    # RESULTADO
-    st.subheader("🏆 1X2")
-    c1,c2,c3=st.columns(3)
-    c1.metric("Local",f"{gL:.2f}")
-    c2.metric("Empate","--")
-    c3.metric("Visitante",f"{gV:.2f}")
+    gL = metricas_finales["goles_local"]
+    gV = metricas_finales["goles_visitante"]
 
-    # GOLES
-    st.subheader("🔥 GOLES")
-    total=gL+gV
-    st.metric("Total esperado",f"{total:.2f}")
+    pL, pE, pV = prob_1x2(gL, gV)
 
-    # TABLA
-    st.subheader("📊 ESTADISTICAS")
+    # DISPLAY ORIGINAL
+    st.markdown("---")
+    st.markdown("### 🏆 PROBABILIDAD DE RESULTADO (1X2)")
+    r1, r2, r3 = st.columns(3)
+    r1.metric("Victoria Local", f"{pL*100:.1f}%")
+    r2.metric("Empate", f"{pE*100:.1f}%")
+    r3.metric("Victoria Visitante", f"{pV*100:.1f}%")
 
-    tabla=pd.DataFrame({
-        "Metrica":["Goles","Remates","Puerta","Paradas","Corners","Tarjetas"],
-        "Local":[
+    st.markdown("### 🔥 MERCADOS DE GOLES")
+    total_goles = gL + gV
+
+    g1, g2, g3 = st.columns(3)
+    g1.metric("Más de 1.5 Goles", f"{(1-poisson(total_goles,0)-poisson(total_goles,1))*100:.1f}%")
+    g2.metric("Más de 2.5 Goles", f"{(1-poisson(total_goles,0)-poisson(total_goles,1)-poisson(total_goles,2))*100:.1f}%")
+    g3.metric("Ambos Marcan", f"{((1-poisson(gL,0))*(1-poisson(gV,0)))*100:.1f}%")
+
+    st.markdown("### 📈 PREDICCION DE ESTADISTICAS")
+
+    tabla = pd.DataFrame({
+        "Metrica": ["Goles","Remates Totales","Remates a Puerta","Paradas","Corners","Tarjetas"],
+        "Local": [
             metricas_finales["goles_local"],
             metricas_finales["remates_totales_local"],
             metricas_finales["remates_puerta_local"],
@@ -155,7 +158,7 @@ if st.button("TEST DEMO"):
             metricas_finales["corners_local"],
             metricas_finales["tarjetas_local"],
         ],
-        "Visitante":[
+        "Visitante": [
             metricas_finales["goles_visitante"],
             metricas_finales["remates_totales_visitante"],
             metricas_finales["remates_puerta_visitante"],
@@ -163,7 +166,7 @@ if st.button("TEST DEMO"):
             metricas_finales["corners_visitante"],
             metricas_finales["tarjetas_visitante"],
         ],
-        "Total":[
+        "Total": [
             metricas_finales["goles_partido"],
             metricas_finales["remates_totales_partido"],
             metricas_finales["remates_puerta_partido"],
@@ -173,4 +176,4 @@ if st.button("TEST DEMO"):
         ]
     })
 
-    st.dataframe(tabla,use_container_width=True)
+    st.dataframe(tabla, use_container_width=True)
