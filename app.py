@@ -115,7 +115,7 @@ def cargar_modelos_ml():
     st.sidebar.write(f"**Total modelos cargados:** {total}")
     if total > 0:
         st.sidebar.success(f"✅ ML ACTIVO: {list(modelos.keys())}")
-        st.sidebar.info("ℹ️ Los modelos usan solo las features con las que fueron entrenados. Las nuevas features (_RIVAL, DIF_POSICION) no afectan hasta reentrenar.")
+        st.sidebar.info("ℹ️ Los modelos usan solo las features con las que fueron entrenados.")
     else:
         st.sidebar.warning("⚠️ Sin modelos ML – usando solo rama métrica")
     return modelos
@@ -424,9 +424,6 @@ def detectar_columna(df, palabras_clave):
 
 def mapear_columnas(df):
     mapeo = {}
-    # Definición de patrones mejorada:
-    # - Se eliminó "local" de ES_LOCAL para evitar falsos positivos.
-    # - Se añadieron variantes "local" y "visitante" a todas las métricas FAVOR/CONTRA.
     columnas_buscar = {
         "GOL FAVOR": [
             "gol favor", "goles favor", "gf", "goles_marcados",
@@ -480,14 +477,12 @@ def mapear_columnas(df):
         "RIVAL": ["rival", "oponente", "equipo rival", "opponent"],
         "POSICION RIVAL": ["posicion rival", "posición rival", "pos rival"],
         "FECHA": ["fecha", "date", "fecha partido"],
-        "ES_LOCAL": ["es_local", "es local", "home", "condicion local"],  # "local" eliminado
+        "ES_LOCAL": ["es_local", "es local", "home", "condicion local"],
     }
     for nombre_estandar, patrones in columnas_buscar.items():
         col_encontrada = detectar_columna(df, patrones)
         if col_encontrada:
             mapeo[col_encontrada] = nombre_estandar
-            # Opcional: mostrar en sidebar para diagnóstico
-            # st.sidebar.write(f"🔁 Mapeo: '{col_encontrada}' → '{nombre_estandar}'")
     return mapeo
 
 def normalizar_y_validar(df):
@@ -496,8 +491,6 @@ def normalizar_y_validar(df):
     mapeo = mapear_columnas(df)
     if mapeo:
         df = df.rename(columns=mapeo)
-        # Mostrar resumen de mapeo en el expander de diagnóstico (opcional)
-        # st.write("**Mapeo aplicado:**", mapeo)
     df.columns = [str(col).strip().upper() for col in df.columns]
     columnas_numericas = [
         "GOL FAVOR", "GOL CONTRA", "REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA",
@@ -510,7 +503,6 @@ def normalizar_y_validar(df):
             df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
             df[col] = pd.to_numeric(df[col], errors='coerce')
         else:
-            # Aviso de columna faltante (solo una vez por tipo)
             if col not in st.session_state.get("faltantes", set()):
                 st.session_state.setdefault("faltantes", set()).add(col)
                 st.warning(f"⚠️ Columna '{col}' no encontrada en los datos. Se usará valor 0 por defecto.")
@@ -655,12 +647,32 @@ def grupo(pos):
 # =========================================================
 st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>", unsafe_allow_html=True)
 
+# --- Nuevo selector de modo de predicción ---
+if "modo_prediccion" not in st.session_state:
+    st.session_state.modo_prediccion = "Combinada (Métrica + ML)"
+
+modo = st.sidebar.radio(
+    "📊 Modo de predicción",
+    ["Métrica únicamente", "ML únicamente", "Combinada (Métrica + ML)"],
+    index=2,  # Por defecto combinada
+    help="Métrica: solo reglas estadísticas. ML: solo modelos entrenados. Combinada: pesos dinámicos según jornada."
+)
+st.session_state.modo_prediccion = modo
+
+# Cargar modelos (se hace siempre)
 modelos_ml = cargar_modelos_ml()
 n_modelos = sum(len(v) for v in modelos_ml.values())
-if n_modelos > 0:
+hay_ml = n_modelos > 0
+
+# Mostrar en sidebar el estado del ML
+if hay_ml:
     st.sidebar.success(f"🤖 ML activo: {n_modelos} modelos cargados ({len(modelos_ml)} métricas)")
 else:
     st.sidebar.info("Sin modelos ML. Usando solo rama métrica.")
+    if modo == "ML únicamente":
+        st.sidebar.warning("⚠️ No hay modelos ML disponibles. Cambiando a modo Métrica.")
+        modo = "Métrica únicamente"
+        st.session_state.modo_prediccion = modo
 
 try:
     df_ligas = get_data_from_sheet("LIGAS")
@@ -772,7 +784,7 @@ try:
             grupo_local_rival = grupo(pos_visit)
             grupo_visit_rival = grupo(pos_local)
 
-            # Calcular bloques (rama métrica)
+            # Calcular bloques (rama métrica) - SIEMPRE
             bloques = []
             for b in [1, 2, 3, 4, 5]:
                 dfL_b = filtrar_bloque(df_local, b, grupo_local_rival if b == 5 else None)
@@ -782,18 +794,57 @@ try:
             b1, b2, b3, b4, b5 = bloques
             metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
 
-            # Construir features para ML
-            feats_local = construir_features_ml(df_local, df_visit, True, jor_sel, pos_local, pos_visit)
-            feats_visit = construir_features_ml(df_visit, df_local, False, jor_sel, pos_visit, pos_local)
+            # Calcular predicciones ML - SIEMPRE (si hay modelos)
+            pred_ml = None
+            if hay_ml:
+                feats_local = construir_features_ml(df_local, df_visit, True, jor_sel, pos_local, pos_visit)
+                feats_visit = construir_features_ml(df_visit, df_local, False, jor_sel, pos_visit, pos_local)
+                pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
 
-            pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
+            # --- Aplicar modo seleccionado ---
+            modo_actual = st.session_state.modo_prediccion
+            st.info(f"📌 Modo activo: **{modo_actual}**")
 
-            metricas_finales, usado_ml = combinar_metrica_ml(metricas_metrica, pred_ml, jor_sel)
+            if modo_actual == "Métrica únicamente":
+                metricas_finales = metricas_metrica
+                usado_ml = False
 
-            if usado_ml:
-                st.info(f"🤖 ML activo — combinando {n_modelos} modelos con rama métrica (jornada {jor_sel})")
-            else:
-                st.info("📐 Solo rama métrica (no hay modelos ML disponibles)")
+            elif modo_actual == "ML únicamente":
+                if pred_ml is not None:
+                    # Convertir pred_ml al mismo formato que metricas_metrica
+                    metricas_finales = {}
+                    # Mapeo de claves de pred_ml a claves de display
+                    for key in metricas_metrica.keys():
+                        base_key = key.replace("_local", "").replace("_visitante", "").replace("_partido", "")
+                        if base_key == "goles":
+                            if key.endswith("_local") and "goles_local" in pred_ml:
+                                metricas_finales[key] = pred_ml["goles_local"]
+                            elif key.endswith("_visitante") and "goles_visitante" in pred_ml:
+                                metricas_finales[key] = pred_ml["goles_visitante"]
+                            elif key.endswith("_partido") and "goles_partido" in pred_ml:
+                                metricas_finales[key] = pred_ml["goles_partido"]
+                            else:
+                                metricas_finales[key] = 0.0
+                        else:
+                            # Para remates, paradas, corners, tarjetas
+                            if key.endswith("_local") and f"{base_key}_local" in pred_ml:
+                                metricas_finales[key] = pred_ml[f"{base_key}_local"]
+                            elif key.endswith("_visitante") and f"{base_key}_visitante" in pred_ml:
+                                metricas_finales[key] = pred_ml[f"{base_key}_visitante"]
+                            elif key.endswith("_partido") and f"{base_key}_partido" in pred_ml:
+                                metricas_finales[key] = pred_ml[f"{base_key}_partido"]
+                            else:
+                                metricas_finales[key] = 0.0
+                    usado_ml = True
+                else:
+                    st.warning("⚠️ No hay predicciones ML disponibles. Fallback a métrica únicamente.")
+                    metricas_finales = metricas_metrica
+                    usado_ml = False
+
+            else:  # Combinada
+                metricas_finales, usado_ml = combinar_metrica_ml(metricas_metrica, pred_ml, jor_sel)
+                if not usado_ml:
+                    st.info("ℹ️ No se pudo combinar con ML (quizás faltan predicciones). Mostrando solo métrica.")
 
             # Asegurar métricas visitante (por si faltan)
             for met in ["remates_totales", "remates_puerta", "paradas", "corners", "tarjetas"]:
