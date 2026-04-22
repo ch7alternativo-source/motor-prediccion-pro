@@ -8,6 +8,7 @@ import re
 import os
 import joblib
 from datetime import datetime
+import traceback
 
 st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
 
@@ -51,7 +52,7 @@ PREFIJOS_METRICAS = {
     "BTTS": "btts",
 }
 
-# Este FEATURES_MODELO se usa solo como referencia inicial, luego se ajusta a cada modelo
+# Referencia de features (solo para casos sin feature_names_in_)
 FEATURES_MODELO_REFERENCIA = [
     "ES_LOCAL", "JORNADA", "DIF_POSICION",
     "GOLES_FAVOR_MA3", "GOLES_CONTRA_MA3", "REMATES_TOTALES_MA3",
@@ -114,7 +115,6 @@ def cargar_modelos_ml():
     st.sidebar.write(f"**Total modelos cargados:** {total}")
     if total > 0:
         st.sidebar.success(f"✅ ML ACTIVO: {list(modelos.keys())}")
-        # Aviso sobre features no entrenadas (para que no haya placebo)
         st.sidebar.info("ℹ️ Los modelos usan solo las features con las que fueron entrenados. Las nuevas features (_RIVAL, DIF_POSICION) no afectan hasta reentrenar.")
     else:
         st.sidebar.warning("⚠️ Sin modelos ML – usando solo rama métrica")
@@ -146,32 +146,26 @@ def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, po
         "TARJETAS": "TARJETAS AMARILLAS FAVOR",
     }
     
-    # --- FILTRADO SEGURO DE ES_LOCAL (CAMBIO 1) ---
+    # --- FILTRADO SEGURO DE ES_LOCAL ---
     if not df_propio.empty and "ES_LOCAL" in df_propio.columns:
         df_temp = df_propio.copy()
-        # Normalizar ES_LOCAL a 0/1 por si viene como string
         df_temp["ES_LOCAL"] = pd.to_numeric(df_temp["ES_LOCAL"], errors="coerce")
         target = 1 if es_local else 0
         df_filtrado = df_temp[df_temp["ES_LOCAL"] == target]
-        
         if df_filtrado.empty:
-            # Fallback visible: usar histórico completo
             st.warning(f"⚠️ ES_LOCAL vacío o mal mapeado para condición {'local' if es_local else 'visitante'} – usando histórico completo del equipo")
             df_propio_filtrado = df_temp
         else:
             df_propio_filtrado = df_filtrado
     else:
-        # Fallback total: no hay columna ES_LOCAL
         if not df_propio.empty:
             st.warning("⚠️ Columna ES_LOCAL no disponible – usando histórico completo del equipo")
             df_propio_filtrado = df_propio.copy()
         else:
             df_propio_filtrado = pd.DataFrame()
     
-    # Para el rival, no filtramos (podría hacerse, pero no es prioritario)
     df_rival_filtrado = df_rival.copy() if not df_rival.empty else pd.DataFrame()
     
-    # Inicializar features
     feats = {
         "ES_LOCAL": 1 if es_local else 0,
         "JORNADA": jornada,
@@ -183,7 +177,7 @@ def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, po
         for ventana in [3, 5, 10]:
             feats[f"{nombre_feat}_MA{ventana}"] = calcular_ma(df_propio_filtrado, col_sheet, ventana)
     
-    # Stats del rival (con sufijo _RIVAL) – aunque los modelos actuales no las usen, las generamos para el futuro
+    # Stats del rival (sufijo _RIVAL)
     for nombre_feat, col_sheet in col_map.items():
         for ventana in [3, 5, 10]:
             feats[f"{nombre_feat}_MA{ventana}_RIVAL"] = calcular_ma(df_rival_filtrado, col_sheet, ventana)
@@ -195,7 +189,6 @@ def predecir_ml(modelos_ml, feats_local, feats_visit):
         return None
 
     resultados = {}
-    # Mapeo de salida esperada -> clave en modelos_ml
     mapeo_salida = {
         "goles_local": "goles_local",
         "goles_visitante": "goles_visitante",
@@ -237,12 +230,10 @@ def predecir_ml(modelos_ml, feats_local, feats_visit):
         for modelo in lista_modelos:
             try:
                 X_full = pd.DataFrame([feats])
-                # --- CAMBIO 2: usar SOLO las features que el modelo espera ---
                 if hasattr(modelo, "feature_names_in_"):
                     expected_cols = modelo.feature_names_in_
                     X = X_full.reindex(columns=expected_cols, fill_value=0)
                 else:
-                    # Si no tiene feature_names_in_, intentamos con FEATURES_MODELO_REFERENCIA
                     X = X_full.reindex(columns=FEATURES_MODELO_REFERENCIA, fill_value=0)
                 pred = modelo.predict(X)[0]
                 predicciones.append(float(pred))
@@ -266,6 +257,7 @@ def predecir_ml(modelos_ml, feats_local, feats_visit):
 def combinar_metrica_ml(metricas_metrica, pred_ml, jornada):
     if pred_ml is None:
         return metricas_metrica, False
+    # Pesos según jornada
     if jornada <= 5:
         w_met, w_ml = 0.8, 0.2
     elif jornada <= 10:
@@ -298,16 +290,18 @@ def combinar_metrica_ml(metricas_metrica, pred_ml, jornada):
         "tarjetas_visitante": "tarjetas_visitante",
         "tarjetas_partido": "tarjetas_partido",
     }
+    combinado = False
     for k_met, v_met in metricas_metrica.items():
         clave_ml = mapeo_directo.get(k_met)
         if clave_ml and clave_ml in pred_ml:
             final[k_met] = w_met * v_met + w_ml * pred_ml[clave_ml]
+            combinado = True
         else:
             final[k_met] = v_met
-    return final, True
+    return final, combinado
 
 # =========================================================
-# AUTENTICACIÓN (original)
+# AUTENTICACIÓN
 # =========================================================
 def check_user(user_in, pass_in):
     try:
@@ -319,7 +313,8 @@ def check_user(user_in, pass_in):
             if u_excel == str(user_in).strip() and p_excel == str(pass_in).strip():
                 return True
         return False
-    except:
+    except Exception as e:
+        st.error(f"Error de autenticación: {e}")
         return False
 
 if 'autenticado' not in st.session_state:
@@ -417,7 +412,7 @@ def obtener_equivalencia_nombre(nombre_app, df_equivalencias):
     return nombre_buscar
 
 # =========================================================
-# DETECCIÓN DE COLUMNAS (robusta)
+# DETECCIÓN DE COLUMNAS (CORREGIDA Y ROBUSTA)
 # =========================================================
 def detectar_columna(df, palabras_clave):
     for col in df.columns.tolist():
@@ -429,29 +424,70 @@ def detectar_columna(df, palabras_clave):
 
 def mapear_columnas(df):
     mapeo = {}
+    # Definición de patrones mejorada:
+    # - Se eliminó "local" de ES_LOCAL para evitar falsos positivos.
+    # - Se añadieron variantes "local" y "visitante" a todas las métricas FAVOR/CONTRA.
     columnas_buscar = {
-        "GOL FAVOR": ["gol favor", "goles favor", "gf", "goles_marcados"],
-        "GOL CONTRA": ["gol contra", "goles contra", "gc", "goles_recibidos"],
-        "REMATES TOTALES FAVOR": ["remates totales favor", "remates totales f", "total shots for", "remates favor"],
-        "REMATES TOTALES CONTRA": ["remates totales contra", "remates totales c", "total shots against", "remates contra"],
-        "REMATES PUERTA FAVOR": ["remates puerta favor", "remates a puerta favor", "remates puerta f", "shots on target for"],
-        "REMATES PUERTA CONTRA": ["remates puerta contra", "remates a puerta contra", "remates puerta c", "shots on target against"],
-        "PARADAS FAVOR": ["paradas favor", "paradas f", "saves for", "paradas realizadas"],
-        "PARADAS CONTRA": ["paradas contra", "paradas c", "saves against"],
-        "CORNERES FAVOR": ["corneres favor", "corners favor", "corner favor"],
-        "CORNERES CONTRA": ["corneres contra", "corners contra", "corner contra"],
-        "TARJETAS AMARILLAS FAVOR": ["tarjetas amarillas favor", "amarillas favor", "yellow cards for"],
-        "TARJETAS AMARILLAS CONTRA": ["tarjetas amarillas contra", "amarillas contra", "yellow cards against"],
+        "GOL FAVOR": [
+            "gol favor", "goles favor", "gf", "goles_marcados",
+            "gol local", "goles local", "goles locales", "goles a favor", "gf local"
+        ],
+        "GOL CONTRA": [
+            "gol contra", "goles contra", "gc", "goles_recibidos",
+            "gol visitante", "goles visitante", "goles visitantes", "goles en contra", "gc visitante"
+        ],
+        "REMATES TOTALES FAVOR": [
+            "remates totales favor", "remates totales f", "total shots for", "remates favor",
+            "remates totales local", "remates totales locales", "total shots local"
+        ],
+        "REMATES TOTALES CONTRA": [
+            "remates totales contra", "remates totales c", "total shots against", "remates contra",
+            "remates totales visitante", "remates totales visitantes", "total shots visitante"
+        ],
+        "REMATES PUERTA FAVOR": [
+            "remates puerta favor", "remates a puerta favor", "remates puerta f", "shots on target for",
+            "remates puerta local", "remates a puerta local", "shots on target local"
+        ],
+        "REMATES PUERTA CONTRA": [
+            "remates puerta contra", "remates a puerta contra", "remates puerta c", "shots on target against",
+            "remates puerta visitante", "remates a puerta visitante", "shots on target visitante"
+        ],
+        "PARADAS FAVOR": [
+            "paradas favor", "paradas f", "saves for", "paradas realizadas",
+            "paradas local", "paradas locales", "saves local"
+        ],
+        "PARADAS CONTRA": [
+            "paradas contra", "paradas c", "saves against",
+            "paradas visitante", "paradas visitantes", "saves visitante"
+        ],
+        "CORNERES FAVOR": [
+            "corneres favor", "corners favor", "corner favor",
+            "corneres local", "corners local", "córners local"
+        ],
+        "CORNERES CONTRA": [
+            "corneres contra", "corners contra", "corner contra",
+            "corneres visitante", "corners visitante", "córners visitante"
+        ],
+        "TARJETAS AMARILLAS FAVOR": [
+            "tarjetas amarillas favor", "amarillas favor", "yellow cards for",
+            "tarjetas amarillas local", "amarillas local"
+        ],
+        "TARJETAS AMARILLAS CONTRA": [
+            "tarjetas amarillas contra", "amarillas contra", "yellow cards against",
+            "tarjetas amarillas visitante", "amarillas visitante"
+        ],
         "JORNADA": ["jornada", "jor", "round", "matchday"],
         "RIVAL": ["rival", "oponente", "equipo rival", "opponent"],
         "POSICION RIVAL": ["posicion rival", "posición rival", "pos rival"],
         "FECHA": ["fecha", "date", "fecha partido"],
-        "ES_LOCAL": ["local", "es_local", "home"],
+        "ES_LOCAL": ["es_local", "es local", "home", "condicion local"],  # "local" eliminado
     }
     for nombre_estandar, patrones in columnas_buscar.items():
         col_encontrada = detectar_columna(df, patrones)
         if col_encontrada:
             mapeo[col_encontrada] = nombre_estandar
+            # Opcional: mostrar en sidebar para diagnóstico
+            # st.sidebar.write(f"🔁 Mapeo: '{col_encontrada}' → '{nombre_estandar}'")
     return mapeo
 
 def normalizar_y_validar(df):
@@ -460,6 +496,8 @@ def normalizar_y_validar(df):
     mapeo = mapear_columnas(df)
     if mapeo:
         df = df.rename(columns=mapeo)
+        # Mostrar resumen de mapeo en el expander de diagnóstico (opcional)
+        # st.write("**Mapeo aplicado:**", mapeo)
     df.columns = [str(col).strip().upper() for col in df.columns]
     columnas_numericas = [
         "GOL FAVOR", "GOL CONTRA", "REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA",
@@ -471,6 +509,11 @@ def normalizar_y_validar(df):
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace(',', '.', regex=False)
             df[col] = pd.to_numeric(df[col], errors='coerce')
+        else:
+            # Aviso de columna faltante (solo una vez por tipo)
+            if col not in st.session_state.get("faltantes", set()):
+                st.session_state.setdefault("faltantes", set()).add(col)
+                st.warning(f"⚠️ Columna '{col}' no encontrada en los datos. Se usará valor 0 por defecto.")
     if "FECHA" in df.columns:
         df["FECHA"] = pd.to_datetime(df["FECHA"], errors='coerce', dayfirst=True)
         df = df.dropna(subset=["FECHA"])
@@ -493,7 +536,7 @@ def cargar_pestana_equipo(ws):
         df = normalizar_y_validar(df)
         return df
     except Exception as e:
-        st.warning(f"Error cargando pestaña: {e}")
+        st.warning(f"Error cargando pestaña: {e}\n{traceback.format_exc()}")
         return pd.DataFrame()
 
 def filtrar_bloque(df, tipo, grupo=None):
@@ -555,7 +598,8 @@ def calcular_metricas(dfL, dfV, jornada):
             metricas[nombre + "_local"] = m_local
             metricas[nombre + "_visitante"] = m_visit
             metricas[nombre + "_partido"] = m_local + m_visit
-        except:
+        except Exception as e:
+            st.warning(f"Error calculando métricas para {nombre}: {e}")
             metricas[nombre + "_local"] = 0
             metricas[nombre + "_visitante"] = 0
             metricas[nombre + "_partido"] = 0
@@ -818,6 +862,8 @@ try:
         except Exception as e:
             st.error(f"Error en el análisis: {e}")
             st.info("Revisa el panel de diagnóstico para ver las columnas disponibles.")
+            st.code(traceback.format_exc())
 
 except Exception as e:
     st.error(f"Error general: {e}")
+    st.code(traceback.format_exc())
