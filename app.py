@@ -74,21 +74,17 @@ def extraer_prefijo_modelo(nombre_archivo):
 def cargar_modelos_ml():
     modelos = {}
     carpeta = "models"
-    
     st.sidebar.markdown("### 🔍 Diagnóstico ML")
     st.sidebar.write(f"📁 Carpeta: {carpeta}")
     st.sidebar.write(f"✅ ¿Existe? {os.path.exists(carpeta)}")
-    
     if not os.path.exists(carpeta):
         st.sidebar.error("No se encontró la carpeta 'models'")
         return modelos
-    
     archivos = [f for f in os.listdir(carpeta) if f.endswith(".pkl")]
     st.sidebar.write(f"📄 Archivos .pkl encontrados: {len(archivos)}")
     if not archivos:
         st.sidebar.error("No hay archivos .pkl en la carpeta")
         return modelos
-    
     for archivo in archivos:
         ruta = os.path.join(carpeta, archivo)
         try:
@@ -107,7 +103,6 @@ def cargar_modelos_ml():
                 st.sidebar.warning(f"⚠️ {archivo} no tiene .predict")
         except Exception as e:
             st.sidebar.error(f"❌ Error en {archivo}: {e}")
-    
     total = sum(len(v) for v in modelos.values())
     st.sidebar.markdown("---")
     st.sidebar.write(f"**Total modelos cargados:** {total}")
@@ -127,7 +122,6 @@ def calcular_ma(df, col, ventana):
     valores = df[col].dropna().tolist()
     if not valores:
         return 0.0
-    # Si hay menos datos que la ventana, usamos los que hay
     if len(valores) < ventana:
         return float(np.mean(valores))
     return float(np.mean(valores[-ventana:]))
@@ -135,8 +129,7 @@ def calcular_ma(df, col, ventana):
 def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, pos_rival):
     """
     Construye features para el equipo propio y el rival.
-    Asume que df_propio ya proviene de la pestaña correspondiente (LOCAL o VISITANTE),
-    por lo que no intenta filtrar por una columna ES_LOCAL inexistente.
+    Asume que df_propio ya proviene de la pestaña correspondiente (LOCAL o VISITANTE).
     Mantiene la feature ES_LOCAL para los modelos (1 = local, 0 = visitante).
     """
     col_map = {
@@ -148,33 +141,24 @@ def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, po
         "CORNERS": "CORNERES FAVOR",
         "TARJETAS": "TARJETAS AMARILLAS FAVOR",
     }
-
-    # Usar el histórico tal cual (las pestañas ya separan LOCAL/VISITANTE)
     df_propio_filtrado = df_propio.copy() if not df_propio.empty else pd.DataFrame()
     df_rival_filtrado = df_rival.copy() if not df_rival.empty else pd.DataFrame()
-
     feats = {
         "ES_LOCAL": 1 if es_local else 0,
         "JORNADA": jornada,
         "DIF_POSICION": (pos_propia - pos_rival) if (pos_propia is not None and pos_rival is not None) else 0,
     }
-
-    # Estadísticas del propio equipo (medias móviles)
     for nombre_feat, col_sheet in col_map.items():
         for ventana in (3, 5, 10):
             feats[f"{nombre_feat}_MA{ventana}"] = calcular_ma(df_propio_filtrado, col_sheet, ventana)
-
-    # Estadísticas del rival (sufijo _RIVAL)
     for nombre_feat, col_sheet in col_map.items():
         for ventana in (3, 5, 10):
             feats[f"{nombre_feat}_MA{ventana}_RIVAL"] = calcular_ma(df_rival_filtrado, col_sheet, ventana)
-
     return feats
 
 def predecir_ml(modelos_ml, feats_local, feats_visit):
     if not modelos_ml:
         return None
-
     resultados = {}
     mapeo_salida = {
         "goles_local": "goles_local",
@@ -204,10 +188,8 @@ def predecir_ml(modelos_ml, feats_local, feats_visit):
         "tarjetas_local": feats_local,
         "tarjetas_visitante": feats_visit,
     }
-    
     if "ml_warning_shown" not in st.session_state:
         st.session_state.ml_warning_shown = False
-    
     for clave_resultado, clave_modelo in mapeo_salida.items():
         lista_modelos = modelos_ml.get(clave_modelo, [])
         if not lista_modelos:
@@ -231,20 +213,16 @@ def predecir_ml(modelos_ml, feats_local, feats_visit):
                 continue
         if predicciones:
             resultados[clave_resultado] = float(np.median(predicciones))
-    
-    # Totales de partido
     for base in ["goles", "remates_totales", "remates_puerta", "paradas", "corners", "tarjetas"]:
         kL = f"{base}_local"
         kV = f"{base}_visitante"
         if kL in resultados and kV in resultados:
             resultados[f"{base}_partido"] = resultados[kL] + resultados[kV]
-    
     return resultados if resultados else None
 
 def combinar_metrica_ml(metricas_metrica, pred_ml, jornada):
     if pred_ml is None:
         return metricas_metrica, False
-    # Pesos según jornada
     if jornada <= 5:
         w_met, w_ml = 0.8, 0.2
     elif jornada <= 10:
@@ -255,7 +233,6 @@ def combinar_metrica_ml(metricas_metrica, pred_ml, jornada):
         w_met, w_ml = 0.5, 0.5
     else:
         w_met, w_ml = 0.4, 0.6
-    
     final = {}
     mapeo_directo = {
         "goles_local": "goles_local",
@@ -399,7 +376,7 @@ def obtener_equivalencia_nombre(nombre_app, df_equivalencias):
     return nombre_buscar
 
 # =========================================================
-# DETECCIÓN DE COLUMNAS (con patrones ampliados para remates a puerta)
+# DETECCIÓN DE COLUMNAS (CON NORMALIZACIÓN UNICODE Y PATRONES AMPLIADOS)
 # =========================================================
 def detectar_columna(df, palabras_clave):
     for col in df.columns.tolist():
@@ -432,12 +409,14 @@ def mapear_columnas(df):
             "remates puerta favor", "remates a puerta favor", "remates puerta f", "shots on target for",
             "remates puerta local", "remates a puerta local", "shots on target local",
             "tiros a puerta local", "tiros a puerta favor", "shots on target", "tiros a puerta",
-            "remates a puerta", "remates al arco", "remates al arco local"
+            "remates a puerta", "remates al arco", "remates al arco local", "tiros portería local",
+            "sot local", "sot favor", "remates al arco favor"
         ],
         "REMATES PUERTA CONTRA": [
             "remates puerta contra", "remates a puerta contra", "remates puerta c", "shots on target against",
             "remates puerta visitante", "remates a puerta visitante", "shots on target visitante",
-            "tiros a puerta visitante", "tiros a puerta contra", "remates a puerta visitante"
+            "tiros a puerta visitante", "tiros a puerta contra", "remates a puerta visitante",
+            "sot visitante", "sot contra", "remates al arco visitante"
         ],
         "PARADAS FAVOR": [
             "paradas favor", "paradas f", "saves for", "paradas realizadas",
@@ -467,7 +446,7 @@ def mapear_columnas(df):
         "RIVAL": ["rival", "oponente", "equipo rival", "opponent"],
         "POSICION RIVAL": ["posicion rival", "posición rival", "pos rival"],
         "FECHA": ["fecha", "date", "fecha partido"],
-        "ES_LOCAL": ["es_local", "es local", "home", "condicion local"],
+        # ES_LOCAL ya no se incluye como columna a mapear (se genera automáticamente)
     }
     for nombre_estandar, patrones in columnas_buscar.items():
         col_encontrada = detectar_columna(df, patrones)
@@ -478,15 +457,19 @@ def mapear_columnas(df):
 def normalizar_y_validar(df):
     if df.empty:
         return df
+    # CORRECCIÓN CRÍTICA: normalizar espacios unicode (no-rompibles, etc.)
+    df.columns = [' '.join(col.split()).strip().upper() for col in df.columns]
     mapeo = mapear_columnas(df)
     if mapeo:
         df = df.rename(columns=mapeo)
-    df.columns = [str(col).strip().upper() for col in df.columns]
+    # Volvemos a limpiar por si el renombrado introdujo espacios raros (no debería)
+    df.columns = [' '.join(col.split()).strip().upper() for col in df.columns]
     columnas_numericas = [
         "GOL FAVOR", "GOL CONTRA", "REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA",
         "REMATES PUERTA FAVOR", "REMATES PUERTA CONTRA", "PARADAS FAVOR", "PARADAS CONTRA",
         "CORNERES FAVOR", "CORNERES CONTRA", "TARJETAS AMARILLAS FAVOR", "TARJETAS AMARILLAS CONTRA",
-        "JORNADA", "POSICION RIVAL", "ES_LOCAL"
+        "JORNADA", "POSICION RIVAL"
+        # ES_LOCAL eliminado de aquí para que no muestre warning
     ]
     for col in columnas_numericas:
         if col in df.columns:
@@ -652,7 +635,6 @@ try:
     if df_ligas.empty:
         st.error("No se pudo cargar la hoja LIGAS")
         st.stop()
-    
     with st.expander("🔧 DIAGNÓSTICO - Hoja LIGAS"):
         st.dataframe(df_ligas)
 
@@ -697,10 +679,9 @@ try:
     visitantes_filtrados = [v for v in visitantes if clean(eq_l).upper() not in v.upper()]
     eq_v = cv.selectbox("🚀 Equipo Visitante", visitantes_filtrados, format_func=clean)
 
-    # Selector de modo (desplegable)
+    # Selector de modo
     if "modo_prediccion" not in st.session_state:
         st.session_state.modo_prediccion = "Combinada (Métrica + ML)"
-    
     opciones_modo = ["Métrica únicamente", "ML únicamente", "Combinada (Métrica + ML)"]
     modo = st.selectbox(
         "📊 Modo de predicción",
@@ -725,9 +706,6 @@ try:
                 st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "Vacío")
                 st.write(f"**Filas LOCAL:** {len(df_local)}")
                 st.write(f"**Filas VISITANTE:** {len(df_visit)}")
-                # Mostrar mapeo aplicado (opcional)
-                if not df_local.empty and 'mapeo_aplicado' in locals():
-                    st.write("**Mapeo LOCAL:**", mapeo_aplicado)
 
             if df_local.empty or df_visit.empty:
                 st.error("No se pudieron cargar los datos de los equipos.")
