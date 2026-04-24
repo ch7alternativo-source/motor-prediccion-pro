@@ -127,11 +127,6 @@ def calcular_ma(df, col, ventana):
     return float(np.mean(valores[-ventana:]))
 
 def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, pos_rival):
-    """
-    Construye features para el equipo propio y el rival.
-    Asume que df_propio ya proviene de la pestaña correspondiente (LOCAL o VISITANTE).
-    Mantiene la feature ES_LOCAL para los modelos (1 = local, 0 = visitante).
-    """
     col_map = {
         "GOLES_FAVOR": "GOL FAVOR",
         "GOLES_CONTRA": "GOL CONTRA",
@@ -410,13 +405,15 @@ def mapear_columnas(df):
             "remates puerta local", "remates a puerta local", "shots on target local",
             "tiros a puerta local", "tiros a puerta favor", "shots on target", "tiros a puerta",
             "remates a puerta", "remates al arco", "remates al arco local", "tiros portería local",
-            "sot local", "sot favor", "remates al arco favor"
+            "sot local", "sot favor", "remates al arco favor",
+            "rematrs puerta favor", "rematrs puerta local", "rematrs a puerta favor"
         ],
         "REMATES PUERTA CONTRA": [
             "remates puerta contra", "remates a puerta contra", "remates puerta c", "shots on target against",
             "remates puerta visitante", "remates a puerta visitante", "shots on target visitante",
             "tiros a puerta visitante", "tiros a puerta contra", "remates a puerta visitante",
-            "sot visitante", "sot contra", "remates al arco visitante"
+            "sot visitante", "sot contra", "remates al arco visitante",
+            "rematrs puerta contra", "rematrs puerta visitante", "rematrs a puerta contra"
         ],
         "PARADAS FAVOR": [
             "paradas favor", "paradas f", "saves for", "paradas realizadas",
@@ -446,7 +443,6 @@ def mapear_columnas(df):
         "RIVAL": ["rival", "oponente", "equipo rival", "opponent"],
         "POSICION RIVAL": ["posicion rival", "posición rival", "pos rival"],
         "FECHA": ["fecha", "date", "fecha partido"],
-        # ES_LOCAL ya no se incluye como columna a mapear (se genera automáticamente)
     }
     for nombre_estandar, patrones in columnas_buscar.items():
         col_encontrada = detectar_columna(df, patrones)
@@ -457,19 +453,18 @@ def mapear_columnas(df):
 def normalizar_y_validar(df):
     if df.empty:
         return df
-    # CORRECCIÓN CRÍTICA: normalizar espacios unicode (no-rompibles, etc.)
+    # Normalizar espacios no-rompibles y otros caracteres de espacio
     df.columns = [' '.join(col.split()).strip().upper() for col in df.columns]
     mapeo = mapear_columnas(df)
     if mapeo:
         df = df.rename(columns=mapeo)
-    # Volvemos a limpiar por si el renombrado introdujo espacios raros (no debería)
+    # Segunda pasada: volver a limpiar por si el renombrado introdujo espacios raros
     df.columns = [' '.join(col.split()).strip().upper() for col in df.columns]
     columnas_numericas = [
         "GOL FAVOR", "GOL CONTRA", "REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA",
         "REMATES PUERTA FAVOR", "REMATES PUERTA CONTRA", "PARADAS FAVOR", "PARADAS CONTRA",
         "CORNERES FAVOR", "CORNERES CONTRA", "TARJETAS AMARILLAS FAVOR", "TARJETAS AMARILLAS CONTRA",
         "JORNADA", "POSICION RIVAL"
-        # ES_LOCAL eliminado de aquí para que no muestre warning
     ]
     for col in columnas_numericas:
         if col in df.columns:
@@ -521,7 +516,6 @@ def filtrar_bloque(df, tipo, grupo=None):
     return df.copy()
 
 def limpiar_ruido(lista):
-    """Elimina valores extremos solo si hay suficientes datos."""
     lista = [x for x in lista if pd.notna(x)]
     if len(lista) < 5:
         return lista
@@ -706,6 +700,11 @@ try:
                 st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "Vacío")
                 st.write(f"**Filas LOCAL:** {len(df_local)}")
                 st.write(f"**Filas VISITANTE:** {len(df_visit)}")
+                # Depuración adicional: mostrar primeras filas de la columna de remates si existe
+                if "REMATES PUERTA FAVOR" in df_local.columns:
+                    st.write("**Ejemplo valores REMATES PUERTA FAVOR:**", df_local["REMATES PUERTA FAVOR"].head(3).tolist())
+                if "REMATES PUERTA CONTRA" in df_local.columns:
+                    st.write("**Ejemplo valores REMATES PUERTA CONTRA:**", df_local["REMATES PUERTA CONTRA"].head(3).tolist())
 
             if df_local.empty or df_visit.empty:
                 st.error("No se pudieron cargar los datos de los equipos.")
