@@ -37,7 +37,6 @@ def get_data_from_sheet(sheet_name, worksheet_name=None):
 # =========================================================
 # CARGA DE MODELOS ML
 # =========================================================
-# FIX 2: Nuevo diccionario de prefijos
 PREFIJOS_METRICAS = {
     "GOLES_LOCAL":          "goles_local",
     "GOLES_VISITANTE":      "goles_visitante",
@@ -123,7 +122,6 @@ def calcular_ma(df, col, ventana):
         return float(np.mean(valores))
     return float(np.mean(valores[-ventana:]))
 
-# FIX 3: Nueva función construir_features_ml
 def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, pos_rival):
     col_map = {
         "GF":  "GOL FAVOR",
@@ -694,7 +692,6 @@ try:
                 st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "Vacío")
                 st.write(f"**Filas LOCAL:** {len(df_local)}")
                 st.write(f"**Filas VISITANTE:** {len(df_visit)}")
-                # Depuración adicional: mostrar primeras filas de la columna de remates si existe
                 if "REMATES PUERTA FAVOR" in df_local.columns:
                     st.write("**Ejemplo valores REMATES PUERTA FAVOR:**", df_local["REMATES PUERTA FAVOR"].head(3).tolist())
                 if "REMATES PUERTA CONTRA" in df_local.columns:
@@ -759,6 +756,21 @@ try:
                 feats_local = construir_features_ml(df_local, df_visit, True, jor_sel, pos_local, pos_visit)
                 feats_visit = construir_features_ml(df_visit, df_local, False, jor_sel, pos_visit, pos_local)
                 pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
+
+                # ── DEBUG TEMPORAL ──────────────────────────────────
+                with st.expander("🔬 DEBUG ML"):
+                    st.write("**Features LOCAL enviadas al modelo:**")
+                    st.json(feats_local)
+                    st.write("**Features VISITANTE enviadas al modelo:**")
+                    st.json(feats_visit)
+                    st.write("**pred_ml resultado:**")
+                    st.write(pred_ml)
+                    st.write("**Modelos disponibles:**", list(modelos_ml.keys()))
+                    for k, lista in modelos_ml.items():
+                        for m in lista:
+                            if hasattr(m, "feature_names_in_"):
+                                st.write(f"Features esperadas por modelo `{k}`:", list(m.feature_names_in_))
+                # ────────────────────────────────────────────────────
 
             # Aplicar modo
             modo_actual = st.session_state.modo_prediccion
