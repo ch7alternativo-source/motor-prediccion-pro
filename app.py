@@ -37,28 +37,25 @@ def get_data_from_sheet(sheet_name, worksheet_name=None):
 # =========================================================
 # CARGA DE MODELOS ML
 # =========================================================
+# FIX 2: Nuevo diccionario de prefijos
 PREFIJOS_METRICAS = {
-    "GOLES_FAVOR": "goles_local",
-    "GOLES_CONTRA": "goles_visitante",
-    "REMATES_TOTALES": "remates_totales",
-    "REMATES_PUERTA": "remates_puerta",
-    "PARADAS": "paradas",
-    "CORNERS": "corners",
-    "TARJETAS": "tarjetas",
-    "RESULTADO": "resultado",
-    "OVER_1_5": "over_1_5",
-    "OVER_2_5": "over_2_5",
-    "BTTS": "btts",
+    "GOLES_LOCAL":          "goles_local",
+    "GOLES_VISITANTE":      "goles_visitante",
+    "REMATES_LOCAL":        "remates_totales",
+    "REMATES_PUERTA_LOCAL": "remates_puerta",
+    "PARADAS_LOCAL":        "paradas",
+    "CORNERS_LOCAL":        "corners",
+    "TARJETAS_LOCAL":       "tarjetas",
 }
 
 FEATURES_MODELO_REFERENCIA = [
-    "ES_LOCAL", "JORNADA", "DIF_POSICION",
-    "GOLES_FAVOR_MA3", "GOLES_CONTRA_MA3", "REMATES_TOTALES_MA3",
-    "REMATES_PUERTA_MA3", "PARADAS_MA3", "CORNERS_MA3", "TARJETAS_MA3",
-    "GOLES_FAVOR_MA5", "GOLES_CONTRA_MA5", "REMATES_TOTALES_MA5",
-    "REMATES_PUERTA_MA5", "PARADAS_MA5", "CORNERS_MA5", "TARJETAS_MA5",
-    "GOLES_FAVOR_MA10", "GOLES_CONTRA_MA10", "REMATES_TOTALES_MA10",
-    "REMATES_PUERTA_MA10", "PARADAS_MA10", "CORNERS_MA10", "TARJETAS_MA10",
+    "ES_LOCAL", "JORNADA", "DIF_POS",
+    "GF_MA3", "GC_MA3", "RT_MA3",
+    "RP_MA3", "PAR_MA3", "COR_MA3", "TAR_MA3",
+    "GF_MA5", "GC_MA5", "RT_MA5",
+    "RP_MA5", "PAR_MA5", "COR_MA5", "TAR_MA5",
+    "GF_MA10", "GC_MA10", "RT_MA10",
+    "RP_MA10", "PAR_MA10", "COR_MA10", "TAR_MA10",
 ]
 
 def extraer_prefijo_modelo(nombre_archivo):
@@ -126,29 +123,26 @@ def calcular_ma(df, col, ventana):
         return float(np.mean(valores))
     return float(np.mean(valores[-ventana:]))
 
+# FIX 3: Nueva función construir_features_ml
 def construir_features_ml(df_propio, df_rival, es_local, jornada, pos_propia, pos_rival):
     col_map = {
-        "GOLES_FAVOR": "GOL FAVOR",
-        "GOLES_CONTRA": "GOL CONTRA",
-        "REMATES_TOTALES": "REMATES TOTALES FAVOR",
-        "REMATES_PUERTA": "REMATES PUERTA FAVOR",
-        "PARADAS": "PARADAS FAVOR",
-        "CORNERS": "CORNERES FAVOR",
-        "TARJETAS": "TARJETAS AMARILLAS FAVOR",
+        "GF":  "GOL FAVOR",
+        "GC":  "GOL CONTRA",
+        "RT":  "REMATES TOTALES FAVOR",
+        "RP":  "REMATES PUERTA FAVOR",
+        "PAR": "PARADAS FAVOR",
+        "COR": "CORNERES FAVOR",
+        "TAR": "TARJETAS AMARILLAS FAVOR",
     }
-    df_propio_filtrado = df_propio.copy() if not df_propio.empty else pd.DataFrame()
-    df_rival_filtrado = df_rival.copy() if not df_rival.empty else pd.DataFrame()
     feats = {
         "ES_LOCAL": 1 if es_local else 0,
-        "JORNADA": jornada,
-        "DIF_POSICION": (pos_propia - pos_rival) if (pos_propia is not None and pos_rival is not None) else 0,
+        "JORNADA":  jornada,
+        "DIF_POS":  (pos_propia - pos_rival) if (pos_propia and pos_rival) else 0,
     }
     for nombre_feat, col_sheet in col_map.items():
-        for ventana in (3, 5, 10):
-            feats[f"{nombre_feat}_MA{ventana}"] = calcular_ma(df_propio_filtrado, col_sheet, ventana)
-    for nombre_feat, col_sheet in col_map.items():
-        for ventana in (3, 5, 10):
-            feats[f"{nombre_feat}_MA{ventana}_RIVAL"] = calcular_ma(df_rival_filtrado, col_sheet, ventana)
+        for v in (3, 5, 10):
+            feats[f"{nombre_feat}_MA{v}"]   = calcular_ma(df_propio, col_sheet, v)
+            feats[f"{nombre_feat}_MA{v}_R"] = calcular_ma(df_rival,  col_sheet, v)
     return feats
 
 def predecir_ml(modelos_ml, feats_local, feats_visit):
