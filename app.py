@@ -845,4 +845,4 @@ try:
             st.error(f"Error en el análisis: {e}\n{traceback.format_exc()}")
 
 except Exception as e:
-    st.error(f"Error general en la app: {e}\n{traceback.format_exc()}"
+    st.error(f"Error general en la app: {e}\n{traceback.format_exc()}")
