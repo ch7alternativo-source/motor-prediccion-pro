@@ -10,142 +10,121 @@ import joblib
 import traceback
 import time
 
+# =========================================================
+# CONFIG GLOBAL — MODO OSCURO + TIPOGRAFÍA + LOGO
+# =========================================================
 st.set_page_config(page_title="COMBIBET PRO", layout="wide")
 
-# =========================================================
-# CONFIGURACIÓN DE LOGO (usamos logo2.png en GitHub)
-# =========================================================
-LOGO_PATH = "logo2.png"   # El archivo que subiste a GitHub
-SPLASH_DURATION = 1.5
+LOGO_URL = "https://raw.githubusercontent.com/ch7alternativo-source/motor-prediccion-pro/main/app/logo2.png"
 
-# =========================================================
-# CSS para el SPLASH (una sola versión, limpia y con fade real)
-# =========================================================
-SPLASH_CSS = """
+st.markdown("""
 <style>
-.splash-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-    animation: fadeOut 1.5s ease-in-out forwards;
-    flex-direction: column;
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Montserrat', sans-serif !important;
+    background-color: #000000 !important;
+    color: #FFFFFF !important;
 }
-@keyframes fadeOut {
-    0% { opacity: 1; visibility: visible; }
-    100% { opacity: 0; visibility: hidden; }
+
+/* Inputs */
+input, textarea, select {
+    background-color: #111111 !important;
+    color: #FFFFFF !important;
+    border: 1px solid #333333 !important;
 }
-.splash-logo {
-    max-width: 80%;
-    max-height: 70%;
+
+/* Botones */
+.stButton>button {
+    background-color: #00C853 !important;
+    color: white !important;
+    border-radius: 6px;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    font-weight: 600;
 }
-.splash-credit {
-    margin-top: 20px;
-    font-size: 16px;
-    color: rgba(0,0,0,0.5);
-    font-family: sans-serif;
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background-color: #000000 !important;
+    border-right: 1px solid #222222;
 }
 </style>
-"""
+""", unsafe_allow_html=True)
 
 # =========================================================
-# FUNCIÓN DE AUTENTICACIÓN (sin cambios)
+# SPLASH FULLSCREEN
+# =========================================================
+if "splash_mostrado" not in st.session_state:
+    st.session_state["splash_mostrado"] = False
+
+if not st.session_state["splash_mostrado"]:
+    splash_css = f"""
+    <style>
+    .splash {{
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        background-color: #000000;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        animation: fadeout 1.5s ease-in-out forwards;
+        animation-delay: 1.2s;
+    }}
+    .splash img {{
+        width: 70vh;
+        max-width: 90vw;
+        object-fit: contain;
+    }}
+    .credit {{
+        margin-top: 12px;
+        font-size: 16px;
+        color: #888888;
+        font-family: 'Montserrat', sans-serif;
+    }}
+    @keyframes fadeout {{
+        0% {{ opacity: 1; }}
+        100% {{ opacity: 0; visibility: hidden; }}
+    }}
+    </style>
+    <div class="splash">
+        <img src="{LOGO_URL}">
+        <div class="credit">by Chiquicuenca</div>
+    </div>
+    """
+    st.markdown(splash_css, unsafe_allow_html=True)
+    time.sleep(1.5)
+    st.session_state["splash_mostrado"] = True
+    st.rerun()
+
+# =========================================================
+# GOOGLE SHEETS
 # =========================================================
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 ID_CONTROL = "1E0oz34jM0-kAyh_XUVwRrI_wy2VK3Rmr9ExgxbkLXSA"
 
-def check_user(user_in, pass_in):
+@st.cache_data(ttl=3600)
+def get_data_from_sheet(sheet_name, worksheet_name=None):
     try:
-        sh = client.open_by_key(ID_CONTROL).worksheet("Sheet1")
-        data = sh.get_all_values()
-        for fila in data:
-            u_excel = str(fila[0]).strip()
-            p_excel = str(fila[1]).strip().replace(".0", "")
-            if u_excel == str(user_in).strip() and p_excel == str(pass_in).strip():
-                return True
-        return False
+        if worksheet_name:
+            sh = client.open_by_key(sheet_name)
+            ws = sh.worksheet(worksheet_name)
+        else:
+            sh = client.open_by_key(ID_CONTROL)
+            ws = sh.worksheet(sheet_name)
+        data = ws.get_all_records()
+        return pd.DataFrame(data)
     except Exception as e:
-        st.error(f"Error de autenticación: {e}")
-        return False
+        st.error(f"Error cargando {sheet_name}/{worksheet_name}: {e}")
+        return pd.DataFrame()
 
 # =========================================================
-# INICIALIZACIÓN DE ESTADOS DE SESIÓN
-# =========================================================
-if 'autenticado' not in st.session_state:
-    st.session_state['autenticado'] = False
-if 'splash_mostrado' not in st.session_state:
-    st.session_state['splash_mostrado'] = False
-
-# =========================================================
-# SPLASH SCREEN (se ejecuta ANTES de cualquier otra cosa)
-# =========================================================
-if not st.session_state['autenticado'] and not st.session_state['splash_mostrado']:
-    # Marcamos splash como mostrado inmediatamente para evitar bucles
-    st.session_state['splash_mostrado'] = True
-    
-    splash_placeholder = st.empty()
-    with splash_placeholder.container():
-        st.markdown(SPLASH_CSS, unsafe_allow_html=True)
-        # Usamos columnas para centrar la imagen con st.image (compatible con Streamlit)
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            try:
-                st.image(LOGO_PATH, use_container_width=True)
-            except:
-                st.markdown("<h1 style='text-align:center;'>COMBIBET PRO</h1>", unsafe_allow_html=True)
-            st.markdown("<p style='text-align:center; color:gray;'>by Chiquicuenca</p>", unsafe_allow_html=True)
-    
-    time.sleep(SPLASH_DURATION)
-    splash_placeholder.empty()
-    st.rerun()
-
-# =========================================================
-# PANTALLA DE LOGIN (con logo y crédito)
-# =========================================================
-if not st.session_state['autenticado']:
-    # Logo pequeño arriba
-    col_logo, col_titulo = st.columns([1, 4])
-    with col_logo:
-        try:
-            st.image(LOGO_PATH, width=80)
-        except:
-            st.markdown("⚽")
-    with col_titulo:
-        st.markdown("<h1 style='margin:0;'>COMBIBET PRO</h1>", unsafe_allow_html=True)
-        st.caption("by Chiquicuenca")
-    
-    st.markdown("<h2 style='text-align: center;'>🔐 Acceso al Sistema</h2>", unsafe_allow_html=True)
-    with st.form("login"):
-        u = st.text_input("Usuario:")
-        p = st.text_input("Contraseña:", type="password")
-        if st.form_submit_button("Entrar"):
-            if check_user(u, p):
-                st.session_state['autenticado'] = True
-                st.rerun()
-            else:
-                st.error("Datos incorrectos")
-    st.stop()
-
-# =========================================================
-# A PARTIR DE AQUÍ: APLICACIÓN PRINCIPAL
-# =========================================================
-st.sidebar.image(LOGO_PATH, width=150)
-st.sidebar.markdown("### COMBIBET PRO")
-st.sidebar.caption("by Chiquicuenca")
-
-# Reemplazamos el título original
-st.markdown("<h2 style='text-align: center;'>⚽ COMBIBET PRO - Análisis Predictivo</h2>", unsafe_allow_html=True)
-
-# =========================================================
-# CARGA DE MODELOS ML (todo igual, sin duplicados)
+# MODELOS ML
 # =========================================================
 PREFIJOS_METRICAS = {
     "GOLES_LOCAL":          "goles_local",
@@ -198,24 +177,6 @@ def cargar_modelos_ml():
         except Exception:
             continue
     return modelos
-
-# =========================================================
-# FUNCIONES AUXILIARES (todas igual que en original, sin duplicados)
-# =========================================================
-@st.cache_data(ttl=3600)
-def get_data_from_sheet(sheet_name, worksheet_name=None):
-    try:
-        if worksheet_name:
-            sh = client.open_by_key(sheet_name)
-            ws = sh.worksheet(worksheet_name)
-        else:
-            sh = client.open_by_key(ID_CONTROL)
-            ws = sh.worksheet(sheet_name)
-        data = ws.get_all_records()
-        return pd.DataFrame(data)
-    except Exception as e:
-        st.error(f"Error cargando {sheet_name}/{worksheet_name}: {e}")
-        return pd.DataFrame()
 
 def calcular_ma(df, col, ventana):
     if col not in df.columns or df.empty:
@@ -357,7 +318,46 @@ def combinar_metrica_ml(metricas_metrica, pred_ml, jornada):
     return final, combinado
 
 # =========================================================
-# FUNCIONES DE CLASIFICACIÓN Y EQUIVALENCIAS (sin cambios)
+# AUTENTICACIÓN
+# =========================================================
+def check_user(user_in, pass_in):
+    try:
+        sh = client.open_by_key(ID_CONTROL).worksheet("Sheet1")
+        data = sh.get_all_values()
+        for fila in data:
+            u_excel = str(fila[0]).strip()
+            p_excel = str(fila[1]).strip().replace(".0", "")
+            if u_excel == str(user_in).strip() and p_excel == str(pass_in).strip():
+                return True
+        return False
+    except Exception as e:
+        st.error(f"Error de autenticación: {e}")
+        return False
+
+if "autenticado" not in st.session_state:
+    st.session_state["autenticado"] = False
+
+if not st.session_state["autenticado"]:
+    st.markdown(f"""
+    <div style="text-align:center; margin-top:20px;">
+        <img src="{LOGO_URL}" style="width:180px;">
+        <div style="color:#888; margin-top:6px;">by Chiquicuenca</div>
+        <h2 style="margin-top:25px;">🔐 Acceso al Sistema</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    with st.form("login"):
+        u = st.text_input("Usuario")
+        p = st.text_input("Contraseña", type="password")
+        if st.form_submit_button("Entrar"):
+            if check_user(u, p):
+                st.session_state["autenticado"] = True
+                st.rerun()
+            else:
+                st.error("Datos incorrectos")
+    st.stop()
+
+# =========================================================
+# CLASIFICACIÓN / EQUIVALENCIAS
 # =========================================================
 def obtener_clasificacion_desde_historico(id_libro_historico, nombre_pestana_clasificacion, jornada_buscada):
     try:
@@ -435,7 +435,7 @@ def obtener_equivalencia_nombre(nombre_app, df_equivalencias):
     return nombre_buscar
 
 # =========================================================
-# DETECCIÓN DE COLUMNAS Y NORMALIZACIÓN (igual que original)
+# DETECCIÓN COLUMNAS / NORMALIZACIÓN
 # =========================================================
 def detectar_columna(df, palabras_clave):
     for col in df.columns.tolist():
@@ -630,7 +630,28 @@ def grupo(pos):
     return list(range(17, 26))
 
 # =========================================================
-# INTERFAZ PRINCIPAL (todo igual pero con logo y título cambiado)
+# SIDEBAR BRANDING
+# =========================================================
+st.sidebar.markdown(f"""
+<div style="text-align:center;">
+    <img src="{LOGO_URL}" style="width:120px;">
+    <div style="color:#888; margin-top:4px;">by Chiquicuenca</div>
+</div>
+""", unsafe_allow_html=True)
+st.sidebar.markdown("---")
+
+# =========================================================
+# CABECERA PRINCIPAL
+# =========================================================
+st.markdown(f"""
+<div style="text-align:center; margin-bottom:20px;">
+    <img src="{LOGO_URL}" style="width:220px;">
+    <div style="color:#888; margin-top:4px;">by Chiquicuenca</div>
+</div>
+""", unsafe_allow_html=True)
+
+# =========================================================
+# INTERFAZ PRINCIPAL
 # =========================================================
 modelos_ml = cargar_modelos_ml()
 n_modelos = sum(len(v) for v in modelos_ml.values())
@@ -734,153 +755,94 @@ try:
             clasif = obtener_clasificacion_desde_historico(id_historico, PESTANA_CLASIFICACION, jornada_clasificacion)
 
             if clasif.empty:
-                st.error(f"No se pudo obtener la clasificación para la Jornada {jornada_clasificacion}.")
+                st.error(f"No se pudo obtener la clasificación para la jornada {jornada_clasificacion}.")
                 st.stop()
 
-            nombre_local_clean = clean(eq_l).upper()
-            nombre_visit_clean = clean(eq_v).upper()
-            nombre_local_clasif = obtener_equivalencia_nombre(nombre_local_clean, df_equivalencias)
-            nombre_visit_clasif = obtener_equivalencia_nombre(nombre_visit_clean, df_equivalencias)
+            nombre_local_equiv = obtener_equivalencia_nombre(clean(eq_l), df_equivalencias)
+            nombre_visit_equiv = obtener_equivalencia_nombre(clean(eq_v), df_equivalencias)
 
-            local_info = clasif[clasif["EQUIPO"] == nombre_local_clasif]
-            visit_info = clasif[clasif["EQUIPO"] == nombre_visit_clasif]
+            pos_local = clasif.loc[clasif["EQUIPO"] == nombre_local_equiv, "POS"]
+            pos_visit = clasif.loc[clasif["EQUIPO"] == nombre_visit_equiv, "POS"]
+            pos_local = int(pos_local.iloc[0]) if not pos_local.empty else 10
+            pos_visit = int(pos_visit.iloc[0]) if not pos_visit.empty else 10
 
-            if local_info.empty or visit_info.empty:
-                st.error("No se encontraron los equipos en la clasificación.")
-                st.stop()
+            grupo_local = grupo(pos_local)
+            grupo_visit = grupo(pos_visit)
 
-            pos_local = local_info.iloc[0]["POS"]
-            pos_visit = visit_info.iloc[0]["POS"]
-            st.success(f"Clasificación Jornada {jornada_clasificacion}: {nombre_local_clean} → {nombre_local_clasif} (Pos {pos_local}) | {nombre_visit_clean} → {nombre_visit_clasif} (Pos {pos_visit})")
+            b1_L = filtrar_bloque(df_local, 1)
+            b2_L = filtrar_bloque(df_local, 2)
+            b3_L = filtrar_bloque(df_local, 3)
+            b4_L = filtrar_bloque(df_local, 4)
+            b5_L = filtrar_bloque(df_local, 5, grupo_local)
 
-            grupo_local_rival = grupo(pos_visit)
-            grupo_visit_rival = grupo(pos_local)
+            b1_V = filtrar_bloque(df_visit, 1)
+            b2_V = filtrar_bloque(df_visit, 2)
+            b3_V = filtrar_bloque(df_visit, 3)
+            b4_V = filtrar_bloque(df_visit, 4)
+            b5_V = filtrar_bloque(df_visit, 5, grupo_visit)
 
-            # Rama métrica
-            bloques = []
-            for b in [1, 2, 3, 4, 5]:
-                dfL_b = filtrar_bloque(df_local, b, grupo_local_rival if b == 5 else None)
-                dfV_b = filtrar_bloque(df_visit, b, grupo_visit_rival if b == 5 else None)
-                metricas_b = calcular_metricas(dfL_b, dfV_b, jor_sel)
-                bloques.append(metricas_b)
-            b1, b2, b3, b4, b5 = bloques
-            metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
+            m1 = calcular_metricas(b1_L, b1_V, jor_sel)
+            m2 = calcular_metricas(b2_L, b2_V, jor_sel)
+            m3 = calcular_metricas(b3_L, b3_V, jor_sel)
+            m4 = calcular_metricas(b4_L, b4_V, jor_sel)
+            m5 = calcular_metricas(b5_L, b5_V, jor_sel)
 
-            # ML
-            pred_ml = None
-            if hay_ml:
-                feats_local = construir_features_ml(df_local, df_visit, True, jor_sel, pos_local, pos_visit)
-                feats_visit = construir_features_ml(df_visit, df_local, False, jor_sel, pos_visit, pos_local)
-                pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
+            metricas_finales = combinar_bloques(m1, m2, m3, m4, m5)
 
-            # Aplicar modo
-            modo_actual = st.session_state.modo_prediccion
-            st.info(f"📌 Modo activo: **{modo_actual}**")
+            feats_local = construir_features_ml(df_local, df_visit, True, jor_sel, pos_local, pos_visit)
+            feats_visit = construir_features_ml(df_visit, df_local, False, jor_sel, pos_visit, pos_local)
 
-            if modo_actual == "Métrica únicamente":
-                metricas_finales = metricas_metrica
-                usado_ml = False
-            elif modo_actual == "ML únicamente":
-                if pred_ml is not None:
-                    metricas_finales = {}
-                    for key in metricas_metrica.keys():
-                        base_key = key.replace("_local", "").replace("_visitante", "").replace("_partido", "")
-                        if base_key == "goles":
-                            if key.endswith("_local") and "goles_local" in pred_ml:
-                                metricas_finales[key] = pred_ml["goles_local"]
-                            elif key.endswith("_visitante") and "goles_visitante" in pred_ml:
-                                metricas_finales[key] = pred_ml["goles_visitante"]
-                            elif key.endswith("_partido") and "goles_partido" in pred_ml:
-                                metricas_finales[key] = pred_ml["goles_partido"]
-                            else:
-                                metricas_finales[key] = 0.0
-                        else:
-                            if key.endswith("_local") and f"{base_key}_local" in pred_ml:
-                                metricas_finales[key] = pred_ml[f"{base_key}_local"]
-                            elif key.endswith("_visitante") and f"{base_key}_visitante" in pred_ml:
-                                metricas_finales[key] = pred_ml[f"{base_key}_visitante"]
-                            elif key.endswith("_partido") and f"{base_key}_partido" in pred_ml:
-                                metricas_finales[key] = pred_ml[f"{base_key}_partido"]
-                            else:
-                                metricas_finales[key] = 0.0
-                    usado_ml = True
+            pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit) if hay_ml else None
+
+            if modo == "Métrica únicamente":
+                metricas_usadas = metricas_finales
+                combinado = False
+            elif modo == "ML únicamente":
+                if pred_ml is None:
+                    st.warning("No hay modelos ML disponibles para este partido. Se usará solo métrica.")
+                    metricas_usadas = metricas_finales
+                    combinado = False
                 else:
-                    st.warning("⚠️ No hay predicciones ML. Fallback a métrica.")
-                    metricas_finales = metricas_metrica
-                    usado_ml = False
-            else:  # Combinada
-                metricas_finales, usado_ml = combinar_metrica_ml(metricas_metrica, pred_ml, jor_sel)
-                if not usado_ml:
-                    st.info("ℹ️ No se pudo combinar con ML. Mostrando solo métrica.")
+                    metricas_usadas = {}
+                    for base in ["goles", "remates_totales", "remates_puerta", "paradas", "corners", "tarjetas"]:
+                        for suf in ["_local", "_visitante", "_partido"]:
+                            k = base + suf
+                            if k in pred_ml:
+                                metricas_usadas[k] = pred_ml[k]
+                    combinado = False
+            else:
+                metricas_usadas, combinado = combinar_metrica_ml(metricas_finales, pred_ml, jor_sel)
 
-            # Asegurar métricas visitante
-            for met in ["remates_totales", "remates_puerta", "paradas", "corners", "tarjetas"]:
-                key_vis = f"{met}_visitante"
-                if key_vis not in metricas_finales:
-                    local_val = metricas_finales.get(f"{met}_local", 0)
-                    total_val = metricas_finales.get(f"{met}_partido", 0)
-                    metricas_finales[key_vis] = max(total_val - local_val, 0)
-            if "goles_visitante" not in metricas_finales:
-                metricas_finales["goles_visitante"] = max(
-                    metricas_finales.get("goles_partido", 0) - metricas_finales.get("goles_local", 0), 0
-                )
-
-            gL = metricas_finales.get("goles_local", 0)
-            gV = metricas_finales.get("goles_visitante", 0)
+            gL = metricas_usadas.get("goles_local", 0)
+            gV = metricas_usadas.get("goles_visitante", 0)
             pL, pE, pV = prob_1x2(gL, gV)
 
+            colA, colB = st.columns(2)
+            with colA:
+                st.subheader("⚽ Goles esperados")
+                st.write(f"Local: {gL:.2f}")
+                st.write(f"Visitante: {gV:.2f}")
+                st.write(f"Total partido: {metricas_usadas.get('goles_partido', gL+gV):.2f}")
+
+            with colB:
+                st.subheader("📊 Probabilidades 1X2 (Poisson)")
+                st.write(f"1 (Local): {pL*100:.1f}%")
+                st.write(f"X (Empate): {pE*100:.1f}%")
+                st.write(f"2 (Visitante): {pV*100:.1f}%")
+
             st.markdown("---")
-            st.markdown("### 🏆 PROBABILIDAD DE RESULTADO (1X2)")
-            r1, r2, r3 = st.columns(3)
-            r1.metric("Victoria Local", f"{pL*100:.1f}%")
-            r2.metric("Empate", f"{pE*100:.1f}%")
-            r3.metric("Victoria Visitante", f"{pV*100:.1f}%")
+            st.subheader("📈 Métricas clave del partido")
+            st.write(metricas_usadas)
 
-            st.markdown("### 🔥 MERCADOS DE GOLES")
-            total_goles = gL + gV
-            p_over15 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1))
-            p_over25 = 1 - (poisson(total_goles, 0) + poisson(total_goles, 1) + poisson(total_goles, 2))
-            p_btts = (1 - poisson(gL, 0)) * (1 - poisson(gV, 0))
-
-            g1, g2, g3 = st.columns(3)
-            g1.metric("Más de 1.5 Goles", f"{p_over15*100:.1f}%")
-            g2.metric("Más de 2.5 Goles", f"{p_over25*100:.1f}%")
-            g3.metric("Ambos Marcan", f"{p_btts*100:.1f}%")
-
-            st.markdown("### 📈 PREDICCIÓN DE ESTADÍSTICAS")
-            tabla = pd.DataFrame({
-                "Métrica": ["Goles", "Remates Totales", "Remates a Puerta", "Paradas", "Córners", "Tarjetas"],
-                "Local": [
-                    f"{metricas_finales.get('goles_local', 0):.1f}",
-                    f"{metricas_finales.get('remates_totales_local', 0):.1f}",
-                    f"{metricas_finales.get('remates_puerta_local', 0):.1f}",
-                    f"{metricas_finales.get('paradas_local', 0):.1f}",
-                    f"{metricas_finales.get('corners_local', 0):.1f}",
-                    f"{metricas_finales.get('tarjetas_local', 0):.1f}",
-                ],
-                "Visitante": [
-                    f"{metricas_finales.get('goles_visitante', 0):.1f}",
-                    f"{metricas_finales.get('remates_totales_visitante', 0):.1f}",
-                    f"{metricas_finales.get('remates_puerta_visitante', 0):.1f}",
-                    f"{metricas_finales.get('paradas_visitante', 0):.1f}",
-                    f"{metricas_finales.get('corners_visitante', 0):.1f}",
-                    f"{metricas_finales.get('tarjetas_visitante', 0):.1f}",
-                ],
-                "Total": [
-                    f"{metricas_finales.get('goles_partido', 0):.1f}",
-                    f"{metricas_finales.get('remates_totales_partido', 0):.1f}",
-                    f"{metricas_finales.get('remates_puerta_partido', 0):.1f}",
-                    f"{metricas_finales.get('paradas_partido', 0):.1f}",
-                    f"{metricas_finales.get('corners_partido', 0):.1f}",
-                    f"{metricas_finales.get('tarjetas_partido', 0):.1f}",
-                ],
-            })
-            st.dataframe(tabla, use_container_width=True)
+            if combinado:
+                st.info("Modo combinado: métricas + ML integrados según jornada.")
+            elif modo == "Métrica únicamente":
+                st.info("Modo métrica: solo estadísticas históricas.")
+            elif modo == "ML únicamente":
+                st.info("Modo ML: solo modelos entrenados.")
 
         except Exception as e:
-            st.error(f"Error en el análisis: {e}")
-            st.code(traceback.format_exc())
+            st.error(f"Error en el análisis: {e}\n{traceback.format_exc()}")
 
 except Exception as e:
-    st.error(f"Error general: {e}")
-    st.code(traceback.format_exc())
+    st.error(f"Error general en la app: {e}\n{traceback.format_exc()}"
