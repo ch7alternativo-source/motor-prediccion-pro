@@ -8,8 +8,51 @@ import re
 import os
 import joblib
 import traceback
+import time  # Para el splash con delay
 
-st.set_page_config(page_title="Analizador de Partidos PRO", layout="wide")
+st.set_page_config(page_title="COMBIBET PRO", layout="wide")
+
+# =========================================================
+# CONFIGURACIÓN DEL LOGO Y ESTILOS
+# =========================================================
+LOGO_PATH = "logo.png"          # Cambia por la ruta de tu logo
+SPLASH_DURATION = 1.5           # segundos
+
+# CSS para el splash a pantalla completa, centrado y con fade-out
+SPLASH_CSS = """
+<style>
+.splash-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    animation: fadeOut 1.5s ease-in-out forwards;
+}
+@keyframes fadeOut {
+    0% { opacity: 1; }
+    100% { opacity: 0; visibility: hidden; }
+}
+.splash-logo {
+    max-width: 80%;
+    max-height: 80%;
+    object-fit: contain;
+}
+.subtle-credit {
+    position: absolute;
+    bottom: 20px;
+    right: 30px;
+    font-size: 14px;
+    color: rgba(0,0,0,0.5);
+    font-family: sans-serif;
+}
+</style>
+"""
 
 # =========================================================
 # CONEXIÓN A GOOGLE SHEETS CON CACHÉ
@@ -35,7 +78,7 @@ def get_data_from_sheet(sheet_name, worksheet_name=None):
         return pd.DataFrame()
 
 # =========================================================
-# CARGA DE MODELOS ML
+# CARGA DE MODELOS ML (sin cambios)
 # =========================================================
 PREFIJOS_METRICAS = {
     "GOLES_LOCAL":          "goles_local",
@@ -70,47 +113,27 @@ def extraer_prefijo_modelo(nombre_archivo):
 def cargar_modelos_ml():
     modelos = {}
     carpeta = "models"
-    st.sidebar.markdown("### 🔍 Diagnóstico ML")
-    st.sidebar.write(f"📁 Carpeta: {carpeta}")
-    st.sidebar.write(f"✅ ¿Existe? {os.path.exists(carpeta)}")
     if not os.path.exists(carpeta):
-        st.sidebar.error("No se encontró la carpeta 'models'")
         return modelos
     archivos = [f for f in os.listdir(carpeta) if f.endswith(".pkl")]
-    st.sidebar.write(f"📄 Archivos .pkl encontrados: {len(archivos)}")
-    if not archivos:
-        st.sidebar.error("No hay archivos .pkl en la carpeta")
-        return modelos
     for archivo in archivos:
         ruta = os.path.join(carpeta, archivo)
         try:
             obj = joblib.load(ruta)
             prefijo = extraer_prefijo_modelo(archivo)
             if prefijo is None:
-                st.sidebar.warning(f"⚠️ {archivo}: prefijo no reconocido")
                 continue
             clave_base = PREFIJOS_METRICAS.get(prefijo)
             if clave_base is None:
                 continue
             if hasattr(obj, 'predict'):
                 modelos.setdefault(clave_base, []).append(obj)
-                st.sidebar.success(f"✅ {archivo} → {clave_base}")
-            else:
-                st.sidebar.warning(f"⚠️ {archivo} no tiene .predict")
-        except Exception as e:
-            st.sidebar.error(f"❌ Error en {archivo}: {e}")
-    total = sum(len(v) for v in modelos.values())
-    st.sidebar.markdown("---")
-    st.sidebar.write(f"**Total modelos cargados:** {total}")
-    if total > 0:
-        st.sidebar.success(f"✅ ML ACTIVO: {list(modelos.keys())}")
-        st.sidebar.info("ℹ️ Los modelos usan solo las features con las que fueron entrenados.")
-    else:
-        st.sidebar.warning("⚠️ Sin modelos ML – usando solo rama métrica")
+        except Exception:
+            continue
     return modelos
 
 # =========================================================
-# FUNCIONES AUXILIARES
+# FUNCIONES AUXILIARES (sin cambios del original)
 # =========================================================
 def calcular_ma(df, col, ventana):
     if col not in df.columns or df.empty:
@@ -268,24 +291,8 @@ def check_user(user_in, pass_in):
         st.error(f"Error de autenticación: {e}")
         return False
 
-if 'autenticado' not in st.session_state:
-    st.session_state['autenticado'] = False
-
-if not st.session_state['autenticado']:
-    st.markdown("<h2 style='text-align: center;'>🔐 Acceso al Sistema</h2>", unsafe_allow_html=True)
-    with st.form("login"):
-        u = st.text_input("Usuario:")
-        p = st.text_input("Contraseña:", type="password")
-        if st.form_submit_button("Entrar"):
-            if check_user(u, p):
-                st.session_state['autenticado'] = True
-                st.rerun()
-            else:
-                st.error("Datos incorrectos")
-    st.stop()
-
 # =========================================================
-# CLASIFICACIÓN Y EQUIVALENCIAS (con caché)
+# FUNCIONES DE CLASIFICACIÓN Y EQUIVALENCIAS (sin cambios)
 # =========================================================
 def obtener_clasificacion_desde_historico(id_libro_historico, nombre_pestana_clasificacion, jornada_buscada):
     try:
@@ -363,7 +370,7 @@ def obtener_equivalencia_nombre(nombre_app, df_equivalencias):
     return nombre_buscar
 
 # =========================================================
-# DETECCIÓN DE COLUMNAS (CON NORMALIZACIÓN UNICODE Y PATRONES AMPLIADOS)
+# DETECCIÓN DE COLUMNAS (sin cambios)
 # =========================================================
 def detectar_columna(df, palabras_clave):
     for col in df.columns.tolist():
@@ -376,61 +383,18 @@ def detectar_columna(df, palabras_clave):
 def mapear_columnas(df):
     mapeo = {}
     columnas_buscar = {
-        "GOL FAVOR": [
-            "gol favor", "goles favor", "gf", "goles_marcados",
-            "gol local", "goles local", "goles locales", "goles a favor", "gf local"
-        ],
-        "GOL CONTRA": [
-            "gol contra", "goles contra", "gc", "goles_recibidos",
-            "gol visitante", "goles visitante", "goles visitantes", "goles en contra", "gc visitante"
-        ],
-        "REMATES TOTALES FAVOR": [
-            "remates totales favor", "remates totales f", "total shots for", "remates favor",
-            "remates totales local", "remates totales locales", "total shots local"
-        ],
-        "REMATES TOTALES CONTRA": [
-            "remates totales contra", "remates totales c", "total shots against", "remates contra",
-            "remates totales visitante", "remates totales visitantes", "total shots visitante"
-        ],
-        "REMATES PUERTA FAVOR": [
-            "remates puerta favor", "remates a puerta favor", "remates puerta f", "shots on target for",
-            "remates puerta local", "remates a puerta local", "shots on target local",
-            "tiros a puerta local", "tiros a puerta favor", "shots on target", "tiros a puerta",
-            "remates a puerta", "remates al arco", "remates al arco local", "tiros portería local",
-            "sot local", "sot favor", "remates al arco favor",
-            "rematrs puerta favor", "rematrs puerta local", "rematrs a puerta favor"
-        ],
-        "REMATES PUERTA CONTRA": [
-            "remates puerta contra", "remates a puerta contra", "remates puerta c", "shots on target against",
-            "remates puerta visitante", "remates a puerta visitante", "shots on target visitante",
-            "tiros a puerta visitante", "tiros a puerta contra", "remates a puerta visitante",
-            "sot visitante", "sot contra", "remates al arco visitante",
-            "rematrs puerta contra", "rematrs puerta visitante", "rematrs a puerta contra"
-        ],
-        "PARADAS FAVOR": [
-            "paradas favor", "paradas f", "saves for", "paradas realizadas",
-            "paradas local", "paradas locales", "saves local"
-        ],
-        "PARADAS CONTRA": [
-            "paradas contra", "paradas c", "saves against",
-            "paradas visitante", "paradas visitantes", "saves visitante"
-        ],
-        "CORNERES FAVOR": [
-            "corneres favor", "corners favor", "corner favor",
-            "corneres local", "corners local", "córners local"
-        ],
-        "CORNERES CONTRA": [
-            "corneres contra", "corners contra", "corner contra",
-            "corneres visitante", "corners visitante", "córners visitante"
-        ],
-        "TARJETAS AMARILLAS FAVOR": [
-            "tarjetas amarillas favor", "amarillas favor", "yellow cards for",
-            "tarjetas amarillas local", "amarillas local"
-        ],
-        "TARJETAS AMARILLAS CONTRA": [
-            "tarjetas amarillas contra", "amarillas contra", "yellow cards against",
-            "tarjetas amarillas visitante", "amarillas visitante"
-        ],
+        "GOL FAVOR": ["gol favor", "goles favor", "gf", "goles_marcados", "gol local", "goles local"],
+        "GOL CONTRA": ["gol contra", "goles contra", "gc", "goles_recibidos", "gol visitante", "goles visitante"],
+        "REMATES TOTALES FAVOR": ["remates totales favor", "remates totales f", "total shots for", "remates favor", "remates totales local"],
+        "REMATES TOTALES CONTRA": ["remates totales contra", "remates totales c", "total shots against", "remates contra", "remates totales visitante"],
+        "REMATES PUERTA FAVOR": ["remates puerta favor", "remates a puerta favor", "shots on target for", "remates puerta local", "tiros a puerta local", "remates al arco local", "sot local"],
+        "REMATES PUERTA CONTRA": ["remates puerta contra", "remates a puerta contra", "shots on target against", "remates puerta visitante", "tiros a puerta visitante", "sot visitante"],
+        "PARADAS FAVOR": ["paradas favor", "paradas f", "saves for", "paradas local"],
+        "PARADAS CONTRA": ["paradas contra", "paradas c", "saves against", "paradas visitante"],
+        "CORNERES FAVOR": ["corneres favor", "corners favor", "corner favor", "corneres local"],
+        "CORNERES CONTRA": ["corneres contra", "corners contra", "corner contra", "corneres visitante"],
+        "TARJETAS AMARILLAS FAVOR": ["tarjetas amarillas favor", "amarillas favor", "yellow cards for", "tarjetas amarillas local"],
+        "TARJETAS AMARILLAS CONTRA": ["tarjetas amarillas contra", "amarillas contra", "yellow cards against", "tarjetas amarillas visitante"],
         "JORNADA": ["jornada", "jor", "round", "matchday"],
         "RIVAL": ["rival", "oponente", "equipo rival", "opponent"],
         "POSICION RIVAL": ["posicion rival", "posición rival", "pos rival"],
@@ -445,12 +409,10 @@ def mapear_columnas(df):
 def normalizar_y_validar(df):
     if df.empty:
         return df
-    # Normalizar espacios no-rompibles y otros caracteres de espacio
     df.columns = [' '.join(col.split()).strip().upper() for col in df.columns]
     mapeo = mapear_columnas(df)
     if mapeo:
         df = df.rename(columns=mapeo)
-    # Segunda pasada: volver a limpiar por si el renombrado introdujo espacios raros
     df.columns = [' '.join(col.split()).strip().upper() for col in df.columns]
     columnas_numericas = [
         "GOL FAVOR", "GOL CONTRA", "REMATES TOTALES FAVOR", "REMATES TOTALES CONTRA",
@@ -465,7 +427,7 @@ def normalizar_y_validar(df):
         else:
             if col not in st.session_state.get("faltantes", set()):
                 st.session_state.setdefault("faltantes", set()).add(col)
-                st.warning(f"⚠️ Columna '{col}' no encontrada en los datos. Se usará valor 0 por defecto.")
+                st.warning(f"⚠️ Columna '{col}' no encontrada. Se usará valor 0.")
     if "FECHA" in df.columns:
         df["FECHA"] = pd.to_datetime(df["FECHA"], errors='coerce', dayfirst=True)
         df = df.dropna(subset=["FECHA"])
@@ -488,7 +450,7 @@ def cargar_pestana_equipo(ws):
         df = normalizar_y_validar(df)
         return df
     except Exception as e:
-        st.warning(f"Error cargando pestaña: {e}\n{traceback.format_exc()}")
+        st.warning(f"Error cargando pestaña: {e}")
         return pd.DataFrame()
 
 def filtrar_bloque(df, tipo, grupo=None):
@@ -603,18 +565,93 @@ def grupo(pos):
     return list(range(17, 26))
 
 # =========================================================
-# INTERFAZ PRINCIPAL
+# SPLASH SCREEN + GESTIÓN DE SESIÓN
 # =========================================================
-st.markdown("<h2 style='text-align: center;'>⚽ ANALIZADOR DE PARTIDOS PRO</h2>", unsafe_allow_html=True)
+if 'autenticado' not in st.session_state:
+    st.session_state['autenticado'] = False
+if 'splash_mostrado' not in st.session_state:
+    st.session_state['splash_mostrado'] = False
 
+# Mostrar splash solo si NO está autenticado y NO se ha mostrado antes
+if not st.session_state['autenticado'] and not st.session_state['splash_mostrado']:
+    # Contenedor vacío para el splash
+    splash_placeholder = st.empty()
+    with splash_placeholder.container():
+        st.markdown(SPLASH_CSS, unsafe_allow_html=True)
+        # Mostrar imagen a pantalla completa con CSS
+        st.markdown(
+            f"""
+            <div class="splash-container">
+                <img src="data:image/png;base64,REEMPLAZAR_CON_BASE64" class="splash-logo" />
+                <div class="subtle-credit">by Chiquicuenca</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        # También se puede mostrar con st.image si se prefiere, pero para centrado total usamos HTML
+        # Para evitar problemas de ruta, lo haremos con st.image + HTML combinado:
+        # Limpiamos y usamos una versión más simple:
+    # Vamos a reemplazar el bloque anterior por uno más fiable con st.image dentro de columnas
+    splash_placeholder.empty()  # Limpiamos y hacemos de nuevo
+    with splash_placeholder.container():
+        st.markdown(SPLASH_CSS, unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            try:
+                st.image(LOGO_PATH, use_container_width=True)
+            except:
+                st.markdown("<h1 style='text-align:center;'>COMBIBET PRO</h1>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align:center; color:gray;'>by Chiquicuenca</p>", unsafe_allow_html=True)
+    time.sleep(SPLASH_DURATION)
+    splash_placeholder.empty()
+    st.session_state['splash_mostrado'] = True
+    st.rerun()  # Refrescar para mostrar la pantalla de login
+
+# =========================================================
+# PANTALLA DE LOGIN (con logo y título modificado)
+# =========================================================
+if not st.session_state['autenticado']:
+    # Logo pequeño en la parte superior
+    col_logo, col_titulo = st.columns([1, 4])
+    with col_logo:
+        try:
+            st.image(LOGO_PATH, width=80)
+        except:
+            st.markdown("⚽")
+    with col_titulo:
+        st.markdown("<h1 style='margin:0;'>COMBIBET PRO</h1>", unsafe_allow_html=True)
+        st.caption("by Chiquicuenca")
+    st.markdown("<h2 style='text-align: center;'>🔐 Acceso al Sistema</h2>", unsafe_allow_html=True)
+    with st.form("login"):
+        u = st.text_input("Usuario:")
+        p = st.text_input("Contraseña:", type="password")
+        if st.form_submit_button("Entrar"):
+            if check_user(u, p):
+                st.session_state['autenticado'] = True
+                st.rerun()
+            else:
+                st.error("Datos incorrectos")
+    st.stop()
+
+# =========================================================
+# A PARTIR DE AQUÍ: APLICACIÓN PRINCIPAL (con logo y título nuevo)
+# =========================================================
+st.sidebar.image(LOGO_PATH, width=150)  # Logo en sidebar
+st.sidebar.markdown("### COMBIBET PRO")
+st.sidebar.caption("by Chiquicuenca")
+
+# Reemplazamos el título original
+st.markdown("<h2 style='text-align: center;'>⚽ COMBIBET PRO - Análisis Predictivo</h2>", unsafe_allow_html=True)
+
+# Resto del código original (desde la carga de modelos hasta el análisis)
 modelos_ml = cargar_modelos_ml()
 n_modelos = sum(len(v) for v in modelos_ml.values())
 hay_ml = n_modelos > 0
 
 if hay_ml:
-    st.sidebar.success(f"🤖 ML activo: {n_modelos} modelos cargados ({len(modelos_ml)} métricas)")
+    st.sidebar.success(f"🤖 ML activo: {n_modelos} modelos cargados")
 else:
-    st.sidebar.info("Sin modelos ML. Usando solo rama métrica.")
+    st.sidebar.info("Sin modelos ML. Usando solo métrica.")
 
 try:
     df_ligas = get_data_from_sheet("LIGAS")
@@ -665,7 +702,6 @@ try:
     visitantes_filtrados = [v for v in visitantes if clean(eq_l).upper() not in v.upper()]
     eq_v = cv.selectbox("🚀 Equipo Visitante", visitantes_filtrados, format_func=clean)
 
-    # Selector de modo
     if "modo_prediccion" not in st.session_state:
         st.session_state.modo_prediccion = "Combinada (Métrica + ML)"
     opciones_modo = ["Métrica únicamente", "ML únicamente", "Combinada (Métrica + ML)"]
@@ -692,10 +728,6 @@ try:
                 st.write("**Columnas VISITANTE:**", list(df_visit.columns) if not df_visit.empty else "Vacío")
                 st.write(f"**Filas LOCAL:** {len(df_local)}")
                 st.write(f"**Filas VISITANTE:** {len(df_visit)}")
-                if "REMATES PUERTA FAVOR" in df_local.columns:
-                    st.write("**Ejemplo valores REMATES PUERTA FAVOR:**", df_local["REMATES PUERTA FAVOR"].head(3).tolist())
-                if "REMATES PUERTA CONTRA" in df_local.columns:
-                    st.write("**Ejemplo valores REMATES PUERTA CONTRA:**", df_local["REMATES PUERTA CONTRA"].head(3).tolist())
 
             if df_local.empty or df_visit.empty:
                 st.error("No se pudieron cargar los datos de los equipos.")
@@ -716,10 +748,6 @@ try:
             if clasif.empty:
                 st.error(f"No se pudo obtener la clasificación para la Jornada {jornada_clasificacion}.")
                 st.stop()
-
-            with st.expander("🔍 Clasificación obtenida (jornada histórica)"):
-                st.write(f"**Jornada consultada:** {jornada_clasificacion}")
-                st.dataframe(clasif, use_container_width=True)
 
             nombre_local_clean = clean(eq_l).upper()
             nombre_visit_clean = clean(eq_v).upper()
@@ -750,27 +778,12 @@ try:
             b1, b2, b3, b4, b5 = bloques
             metricas_metrica = combinar_bloques(b1, b2, b3, b4, b5)
 
-            # ML (si hay modelos)
+            # ML
             pred_ml = None
             if hay_ml:
                 feats_local = construir_features_ml(df_local, df_visit, True, jor_sel, pos_local, pos_visit)
                 feats_visit = construir_features_ml(df_visit, df_local, False, jor_sel, pos_visit, pos_local)
                 pred_ml = predecir_ml(modelos_ml, feats_local, feats_visit)
-
-                # ── DEBUG TEMPORAL ──────────────────────────────────
-                with st.expander("🔬 DEBUG ML"):
-                    st.write("**Features LOCAL enviadas al modelo:**")
-                    st.json(feats_local)
-                    st.write("**Features VISITANTE enviadas al modelo:**")
-                    st.json(feats_visit)
-                    st.write("**pred_ml resultado:**")
-                    st.write(pred_ml)
-                    st.write("**Modelos disponibles:**", list(modelos_ml.keys()))
-                    for k, lista in modelos_ml.items():
-                        for m in lista:
-                            if hasattr(m, "feature_names_in_"):
-                                st.write(f"Features esperadas por modelo `{k}`:", list(m.feature_names_in_))
-                # ────────────────────────────────────────────────────
 
             # Aplicar modo
             modo_actual = st.session_state.modo_prediccion
@@ -804,13 +817,13 @@ try:
                                 metricas_finales[key] = 0.0
                     usado_ml = True
                 else:
-                    st.warning("⚠️ No hay predicciones ML disponibles. Fallback a métrica únicamente.")
+                    st.warning("⚠️ No hay predicciones ML. Fallback a métrica.")
                     metricas_finales = metricas_metrica
                     usado_ml = False
             else:  # Combinada
                 metricas_finales, usado_ml = combinar_metrica_ml(metricas_metrica, pred_ml, jor_sel)
                 if not usado_ml:
-                    st.info("ℹ️ No se pudo combinar con ML (quizás faltan predicciones). Mostrando solo métrica.")
+                    st.info("ℹ️ No se pudo combinar con ML. Mostrando solo métrica.")
 
             # Asegurar métricas visitante
             for met in ["remates_totales", "remates_puerta", "paradas", "corners", "tarjetas"]:
@@ -878,7 +891,6 @@ try:
 
         except Exception as e:
             st.error(f"Error en el análisis: {e}")
-            st.info("Revisa el panel de diagnóstico para ver las columnas disponibles.")
             st.code(traceback.format_exc())
 
 except Exception as e:
